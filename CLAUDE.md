@@ -2,12 +2,43 @@
 
 Your starter repo for a COMP4020 prototype: a static site in HTML/CSS/TypeScript
 that builds to plain HTML/CSS/JS and deploys to GitHub Pages. The deployed site
-is what gets marked, not this repo.
+is what gets marked --- not this repo, and not "it works on my machine". It's
+marked live in Chrome against the deployed URL at two viewports --- 1920×1080
+(desktop) and 390×844 (phone) --- and both count in full.
 
 The
 [course website](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/)
 publishes this deliverable's brief and spec, and this repo's name tells you
 which deliverable applies. Read both before you plan or build.
+
+## How to work in here
+
+- Keep the dev server running (`pnpm dev`) so you see changes as you make them.
+- Run `pnpm check` before you push.
+- Open the page in a browser and look at it. The rendered page is the truth;
+  your mental model of it isn't --- the `agent-browser` CLI (see the course
+  site's backpressure topic) is a good way to do this from the agent itself.
+- When a check fails, read its output before you change anything. Treat a red
+  check as authoritative --- the page is wrong until the check is green, not
+  until you decide it should be.
+- Never commit a red state.
+- Commit sensibly and incrementally *as you go*, not as one dump at the end of
+  a session. Once a logically-scoped piece of work is green, commit it with a
+  message explaining why before moving to the next piece. This isn't
+  hypothetical: in Assignment 1, an entire feature arc sat uncommitted across
+  ~2400 lines and 19 files for a whole session and had to be reconstructed into
+  three retroactive commits afterwards, losing the true chronology. Commit as
+  each piece lands instead.
+
+## Full-bleed canvas gotcha
+
+An absolutely-positioned replaced element (`<canvas>`, `<img>`, `<video>`)
+with `inset: 0` and no explicit `width`/`height` does **not** stretch to fill
+its container — it keeps its intrinsic size (300×150 for a bare canvas) and
+just gets positioned in the corner. Caught this by actually opening the page;
+`pnpm check` has no way to see it, since nothing in the DOM structure is
+wrong. Always pair `inset: 0` with explicit `width: 100%; height: 100%` on a
+replaced element you want full-bleed.
 
 ## The link-preview card
 
@@ -15,20 +46,19 @@ which deliverable applies. Read both before you plan or build.
 head points at it. Replace it and the `description` meta, and copy the head
 block into any new page. The card URL resolves against the page that names it,
 like any link --- `./card.png` is wrong one directory down, and nothing in CI
-checks it, so the deployed head is the only place a broken one shows up.
+checks it, so look at the deployed head when you add pages.
 
 ## The checks
 
-`pnpm check` runs them, and `pnpm check:evidence` is the extra gate before you
-ship. CI runs the same plus links, secrets and the deploy.
+`pnpm check` runs them (`pnpm check:evidence` is the extra gate before you
+ship); CI runs the same plus links, secrets and the deploy. Read the failure.
 
 `spec/README.md`, `PROCESS.md` and `reflections/README.md` are in this repo and
 say what they are for.
 
 ## This file is yours
 
-A starting point, not a rulebook: what you add to it is the harness, and the
-harness is assessed. This file and the sensors you wire into `check` carry
-across the course --- both come with you into next week's repo. The prototype
-doesn't: source, and the tests answering this week's published spec, stay
-behind. `spec/README.md` draws the line.
+A starting point, not a rulebook. As you learn what your prototype needs --- a
+convention the work has to hold to, a sensor that keeps catching you out (a
+linter, say), a fact about the stack that is easy to get wrong --- write it down
+here and wire it into `check`. Growing this file is the work.
