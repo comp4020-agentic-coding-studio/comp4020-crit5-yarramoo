@@ -1,70 +1,64 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
 ## What I built
 
-One paragraph: the thing, and the idea behind it.
+A small browser voxel game. You spawn in a bounded world at dawn, break and
+place blocks, and the run ends — one way or the other — before five minutes are
+up. The scope started much larger than that, and the most important decision in
+the week was the one that made it smaller in the right direction.
 
 ## The moments that mattered
 
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
+*(In progress — this file is written as the work happens, not reconstructed at
+the end. Moments are added as they land.)*
 
-1. **what happened** --- the problem, or the thing that went wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
+### 1. Choosing which axis to cut on
 
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** --- the standards and checks your work has to satisfy
---- rather than in a retry: a rule added to `CLAUDE.md`, a check wired up, an
-attempt thrown away. Retrying until it passes is the routine case, and changing
-what the work runs against is the skilled one.
+I set out to build a full Minecraft clone: chunking, meshing, lighting, physics,
+mob AI, inventory, a day/night cycle. Planning put the honest figure at ~134
+hours of design work, ~80 hours after every subsystem had been stress-tested
+down to its floor, against a real budget of roughly 50.
 
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
+The obvious response is to cut features until the list fits. I cut on a
+different axis: I kept every named system as a real system and shrank the
+**world** and the **run** instead — one small bounded world, one night, one
+ending. That way chunking, meshing, lighting, physics and mob AI all stayed in,
+but each became load-bearing for the ending rather than decorative. A sandbox
+has no ending; this has one, and it arrives on a clock.
 
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
+*Citation to be added when the world-shape commit lands.*
 
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
+### 2. A correction that landed in the harness, not in a retry
 
-> the prompt, verbatim
+Before writing any game code I probed the repo's own checks rather than trusting
+them. `tsconfig.json` shipped with `"include": ["*.ts", "spec", "scripts"]` —
+non-recursive, and with no `src`. I planted a deliberately broken file at
+`src/__probe.ts` (`const n: number = "definitely not a number"`) and ran
+`pnpm typecheck`: **exit 0**. Adding `"src"` to `include` and re-running gave
+exit 2 and the expected `TS2322`.
 
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
+Left alone, every line of game code in `src/` would have been invisible to the
+typechecker all week, while `pnpm check` reported green. The fix went into the
+harness — the tsconfig and a note in `CLAUDE.md` — rather than into a habit of
+remembering to check manually.
+
+Cited: [`0b10ae8`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-yarramoo/commit/0b10ae8)
+
+### 3. The change that came from playing, not reading
+
+*To be written after the first real playtest on a phone. This one has to come
+from watching the game be played, not from reading its code.*
+
+## The harness
+
+`CLAUDE.md` came forward from last week's repo rather than starting from the
+template — carried in its own commit, [`e716b71`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-yarramoo/commit/e716b71), before any
+prototype work, so its provenance is visible in the history rather than asserted
+here. The rules in it that earned their place are the ones written after
+something went wrong: the full-bleed canvas gotcha, and the commit-as-you-go
+rule that came out of Assignment 1.
 
 ## Before you ship
 
-`pnpm check:evidence` verifies your citations resolve to real commits, that a
-reflection entry the marker reads is in `reflections/`, and that your
-`CLAUDE.md` is there --- before a marker ever opens the file. It checks that
-your map is traceable, not that it is good: the marker judges whether your
-small, deliberately chosen set of moments shows real judgement and reflection. A
-green check is not a substitute for that curation.
-
-Images aren't checked: unlike a citation whose SHA doesn't resolve, a broken
-image is visible the moment this file is rendered on GitHub.
+`pnpm check` and `pnpm check:evidence` both need to be green, and they check
+different things — the second is not part of the first.
