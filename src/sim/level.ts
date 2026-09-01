@@ -5,6 +5,7 @@
 import type { Rect } from "../core/aabb.ts";
 import { newEnemy, type Enemy } from "./enemy.ts";
 import { MAX_JUMP_DISTANCE } from "./constants.ts";
+import type { MovingPlatform } from "./platform.ts";
 
 export const GROUND_Y = 600;
 
@@ -25,6 +26,7 @@ export const GAP1_END = GAP1_START + GAP1_WIDTH;
 
 export interface Level {
   platforms: Rect[];
+  movingPlatforms: MovingPlatform[];
   enemies: Enemy[];
   goal: Rect;
   spawn: { x: number; feetY: number };
@@ -74,6 +76,7 @@ export function buildLevel(): Level {
 
   return {
     platforms: [floor1, tunnelCeiling, floor2, floor3],
+    movingPlatforms: [],
     enemies: [gateEnemy, baitEnemy],
     goal,
     spawn: { x: 60, feetY: GROUND_Y },
