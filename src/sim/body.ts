@@ -61,18 +61,32 @@ export function stepBody(
   // X, then Y -- resolving both against the same combined box would let a
   // diagonal move clip a corner it should have been stopped by on one axis
   // alone.
-  x += vx * dtSec;
-  let box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
-  for (const p of platforms) {
-    if (!overlaps(box, p)) continue;
-    x = vx > 0 ? p.x - PLAYER_W / 2 : p.x + p.w + PLAYER_W / 2;
-    vx = 0;
-    box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
+  //
+  // Only resolve horizontally when actually moving (vx !== 0). A body can
+  // arrive here already embedded in a platform with vx === 0 -- the lunge
+  // lands its target by teleporting straight to the resolved endpoint, which
+  // (deliberately, see lunge.ts's isSupportingPlatform) can end up embedded
+  // in the platform the player was standing on for any aim with a downward
+  // component. The `vx > 0 ? ... : ...` ternary has no "didn't move" case, so
+  // it was treating that stationary embedding as a leftward approach and
+  // ejecting the player out the platform's FAR right edge -- catapulting a
+  // safely-landed lunge out into the next gap. A stationary body has nothing
+  // to resolve on this axis; the Y pass below correctly settles it onto the
+  // surface instead.
+  if (vx !== 0) {
+    x += vx * dtSec;
+    let box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
+    for (const p of platforms) {
+      if (!overlaps(box, p)) continue;
+      x = vx > 0 ? p.x - PLAYER_W / 2 : p.x + p.w + PLAYER_W / 2;
+      vx = 0;
+      box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
+    }
   }
 
   feetY += vy * dtSec;
   grounded = false;
-  box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
+  let box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
   for (const p of platforms) {
     if (!overlaps(box, p)) continue;
     if (vy > 0) {
