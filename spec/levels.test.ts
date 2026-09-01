@@ -4,9 +4,29 @@
 
 import { describe, expect, it } from "vitest";
 import { isOver } from "../src/sim/run.ts";
-import { buildLevel2, buildLevel3, buildLevel4 } from "../src/sim/level.ts";
+import {
+  buildLevel2,
+  buildLevel3,
+  buildLevel4,
+  buildLevel5,
+  fallCarryDistance,
+  PINCER_A_X,
+  PINCER_B_X,
+  PINCER_DROP,
+  PINCER_FLOOR_Y,
+  PINCER_LEDGE_END,
+} from "../src/sim/level.ts";
 import { newGame, stepGame, type Game, type GameInput } from "../src/sim/game.ts";
-import { AIM_METER_MAX_MS, PLAYER_H, ENEMY_H } from "../src/sim/constants.ts";
+import {
+  AIM_METER_MAX_MS,
+  ENEMY_H,
+  ENEMY_LUNGE_DISTANCE,
+  ENEMY_LUNGE_RANGE_X,
+  ENEMY_W,
+  JUMP_APEX_HEIGHT,
+  PLAYER_H,
+  PLAYER_W,
+} from "../src/sim/constants.ts";
 
 const DT_MS = 16;
 const MAX_FRAMES = 3000; // these levels have a long ferry ride to simulate through
@@ -168,5 +188,84 @@ describe("level 4: a hopper hazard and a lunger ambush", () => {
     let g: Game = newGame(buildLevel4());
     g = runUntil(g, (s) => isOver(s.run), () => walk(1)); // never aims, never stops
     expect(g.run.outcome).toBe("lost");
+  });
+});
+
+describe("level 5: two lungers at once, one charge", () => {
+  const byId = (g: Game, id: string) => g.enemies.find((e) => e.id === id)!;
+
+  // The geometry this level stands on, asserted against the real constants
+  // rather than eyeballed -- the same standard as GAP1_EXCEEDS_MAX_JUMP. The
+  // margins here are single-digit, so "looks about right" is not good enough.
+  describe("its geometry holds", () => {
+    it("both lungers cover the whole landing window, so the pincer always springs", () => {
+      const windowStart = PINCER_LEDGE_END;
+      const windowEnd = PINCER_LEDGE_END + fallCarryDistance(PINCER_DROP);
+      // Where a player is inside BOTH trigger ranges at once.
+      const coveredFrom = PINCER_B_X - ENEMY_LUNGE_RANGE_X;
+      const coveredTo = PINCER_A_X + ENEMY_LUNGE_RANGE_X;
+
+      expect(windowStart).toBeGreaterThanOrEqual(coveredFrom);
+      expect(windowEnd).toBeLessThanOrEqual(coveredTo);
+    });
+
+    it("the drop is past a jump apex, so arriving in the chamber is a commitment", () => {
+      expect(PINCER_DROP).toBeGreaterThan(JUMP_APEX_HEIGHT);
+    });
+
+    it("closes on a player who dodges both dashes instead of killing one", () => {
+      // Each dash ends 220u toward the player, so the two endpoints finish
+      // closer together than a player is wide plus the two half-enemies
+      // flanking them: there is no gap left to come down in.
+      const aEnds = PINCER_A_X + ENEMY_LUNGE_DISTANCE;
+      const bEnds = PINCER_B_X - ENEMY_LUNGE_DISTANCE;
+      expect(Math.abs(bEnds - aEnds)).toBeLessThan(ENEMY_W + PLAYER_W);
+    });
+  });
+
+  it("an expert script kills one, is carried clear of the other, and reaches the goal", () => {
+    let g: Game = newGame(buildLevel5());
+
+    // Walk off the ledge holding the direction all the way down -- the far end
+    // of the landing window, and so the tightest case for the margins above.
+    g = runUntil(g, (s) => s.body.grounded && s.body.feetY >= PINCER_FLOOR_Y, () => walk(1));
+
+    // The beat the level exists for: both are already winding up, on one frame.
+    expect(byId(g, "pincerA").lungeState).toBe("telegraph");
+    expect(byId(g, "pincerB").lungeState).toBe("telegraph");
+
+    // One charge, two enemies. The shot that kills A is also what saves the
+    // player from B: it travels its full fixed 320u regardless of the kill,
+    // dumping them well outside B's reach before B's telegraph even ends.
+    g = fireLunge(g, aimAt(g, "pincerA"));
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    expect(byId(g, "pincerA").alive).toBe(false);
+
+    // B fires into the space the player has already left.
+    g = runUntil(g, (s) => byId(s, "pincerB").lungeState === "dashing", () => walk(0));
+    g = runUntil(g, (s) => byId(s, "pincerB").lungeState === "patrol", () => walk(0));
+    expect(g.run.outcome).toBe(null);
+    expect(byId(g, "pincerB").alive).toBe(true);
+    // ...and a lunger's dash permanently repositions it: it stays where it landed.
+    expect(byId(g, "pincerB").x).toBeLessThan(PINCER_B_X);
+
+    // Landing refilled the charge, and the survivor is back within reach.
+    g = fireLunge(g, aimAt(g, "pincerB"));
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    expect(byId(g, "pincerB").alive).toBe(false);
+
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe("won");
+  });
+
+  it("dropping in and walking on without ever aiming is fatal", () => {
+    let g: Game = newGame(buildLevel5());
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1)); // never aims, never stops
+    expect(g.run.outcome).toBe("lost");
+    // Killed by a lunger rather than by falling: the chamber floor caught them.
+    expect(g.enemies.some((e) => e.alive)).toBe(true);
+    expect(g.body.feetY).toBeLessThanOrEqual(PINCER_FLOOR_Y);
   });
 });

@@ -4,7 +4,7 @@
 
 import type { Rect } from "../core/aabb.ts";
 import { newEnemy, newHopperEnemy, newLungerEnemy, newVerticalEnemy, type Enemy } from "./enemy.ts";
-import { MAX_JUMP_DISTANCE } from "./constants.ts";
+import { GRAVITY, MAX_JUMP_DISTANCE, MOVE_SPEED } from "./constants.ts";
 import { newMovingPlatform, type MovingPlatform } from "./platform.ts";
 
 export const GROUND_Y = 600;
@@ -193,4 +193,76 @@ export function buildLevel4(): Level {
   };
 }
 
-export const LEVELS: Level[] = [buildLevel(), buildLevel2(), buildLevel3(), buildLevel4()];
+/**
+ * How far a walk-off fall carries horizontally, for a player who keeps holding
+ * the direction they walked off in. Used to size level 5's landing window
+ * against the lungers' trigger range, rather than eyeballing it.
+ */
+export function fallCarryDistance(dropHeight: number): number {
+  return MOVE_SPEED * Math.sqrt((2 * dropHeight) / GRAVITY);
+}
+
+/** Level 5's drop: past a jump apex (~137u), so the chamber is a commitment. */
+export const PINCER_DROP = 160;
+export const PINCER_LEDGE_END = 1050;
+export const PINCER_FLOOR_Y = GROUND_Y + PINCER_DROP;
+export const PINCER_A_X = 902;
+export const PINCER_B_X = 1302;
+
+export function buildLevel5(): Level {
+  // Every lunger so far has been fought one at a time, at a distance the player
+  // chose: level 4's is met head-on with a full charge and all the time in the
+  // world. This pair is met simultaneously, at a distance the level chooses.
+  //
+  // The drop is what makes it simultaneous, and it is the whole reason this
+  // isn't just level 4 twice. Walking in from the left would put the player
+  // inside the near lunger's 260u trigger range roughly 400u before the far
+  // one's, turning a pincer into two separate, easy duels. Arriving from above
+  // lands the player between them, inside both ranges on the same frame.
+  //
+  // The aha is a rule the player has so far only been punished by: a lunge
+  // always travels its FULL fixed distance. Level 1's bait enemy uses that to
+  // fling an over-eager player into a pit. Here the same overshoot is the
+  // escape -- the shot that kills one lunger carries the player 320u clear,
+  // out of the survivor's range, which is the only reason one charge is enough
+  // for two enemies.
+  const ledge: Rect = { x: -100, y: GROUND_Y, w: PINCER_LEDGE_END + 100, h: 60 };
+
+  // Reaches well to the LEFT of the drop, because that's where a leftward
+  // killing shot puts the player down: a 320u dash fired at lungerA from the
+  // landing window ends around x=780, and it has to end on solid ground.
+  const floor5: Rect = { x: 600, y: PINCER_FLOOR_Y, w: 1400, h: 300 };
+
+  // 400u apart, straddling the landing window. Two constraints pin this:
+  //
+  //   - Both must trigger wherever in the window the player touches down. The
+  //     window is [1050, 1050 + fallCarryDistance(160) ~= 1155]; each lunger
+  //     covers +/-260u, so their overlap is [1042, 1162]. It fits, with only
+  //     ~8u of slack at each end -- checked by a test, not by eye.
+  //   - 400u apart means their dash endpoints (902+220=1122 and 1302-220=1082)
+  //     land 40u apart, closer than ENEMY_W + PLAYER_W (52u). So a player who
+  //     merely dodges both dashes by jumping comes down into a gap too narrow
+  //     to stand in: the pincer closes. Killing one is not optional.
+  const lungerA = newLungerEnemy("pincerA", PINCER_A_X, PINCER_FLOOR_Y);
+  const lungerB = newLungerEnemy("pincerB", PINCER_B_X, PINCER_FLOOR_Y);
+
+  const goal: Rect = { x: 1750, y: PINCER_FLOOR_Y - 40, w: 60, h: 40 };
+  const bounds: Rect = { x: -150, y: 420, w: 2250, h: 780 };
+
+  return {
+    platforms: [ledge, floor5],
+    movingPlatforms: [],
+    enemies: [lungerA, lungerB],
+    goal,
+    spawn: { x: 60, feetY: GROUND_Y },
+    bounds,
+  };
+}
+
+export const LEVELS: Level[] = [
+  buildLevel(),
+  buildLevel2(),
+  buildLevel3(),
+  buildLevel4(),
+  buildLevel5(),
+];
