@@ -111,7 +111,14 @@ function segmentEntryTime(x: number, y: number, dx: number, dy: number, r: Rect)
     if (t0 > t1) [t0, t1] = [t1, t0];
     tMin = Math.max(tMin, t0);
     tMax = Math.min(tMax, t1);
-    if (tMin > tMax) return null;
+    // Flush convention, generalized to the diagonal case: if the two axes'
+    // valid windows meet at only a single instant, the point was touching a
+    // boundary there (grazing an edge or corner), never strictly inside on
+    // both axes at once. A starting point sitting flush against a platform
+    // (the normal case -- the player is always standing on something when a
+    // lunge fires) would otherwise register as blocked at t=0 the instant it
+    // moves in any non-axis-aligned direction.
+    if (tMin >= tMax) return null;
   }
 
   return tMin;
