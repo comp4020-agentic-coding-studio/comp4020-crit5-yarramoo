@@ -7,10 +7,11 @@
 import type { Rect } from "../core/aabb.ts";
 import type { Vec2 } from "../core/vec.ts";
 import { bodyRect } from "../sim/body.ts";
-import { ENEMY_H, ENEMY_W, PLAYER_H } from "../sim/constants.ts";
-import { enemyRect } from "../sim/enemy.ts";
+import { AIM_METER_MAX_MS, PLAYER_H } from "../sim/constants.ts";
+import { enemyRect, type Enemy } from "../sim/enemy.ts";
 import type { Game } from "../sim/game.ts";
 import { resolveAimEndpoint } from "../sim/lunge.ts";
+import { platformRect } from "../sim/platform.ts";
 
 export interface Camera {
   x: number;
@@ -36,14 +37,95 @@ const COLORS = {
   sky: "#1a1f2e",
   platform: "#3a4a63",
   platformEdge: "#5a7099",
+  platformMoving: "#3a5f4a",
+  platformMovingEdge: "#5ca57a",
   player: "#f2c94c",
+  playerAiming: "#f2e29c",
   enemy: "#e05c5c",
   goal: "#5ce0a0",
-  aimLine: "rgba(255, 255, 255, 0.55)",
-  aimMarker: "#ffffff",
+  aimMarkerFull: { r: 255, g: 255, b: 255 },
+  aimMarkerEmpty: { r: 224, g: 60, b: 60 },
 };
 
-export function render(ctx: CanvasRenderingContext2D, game: Readonly<Game>, canvasW: number, canvasH: number): void {
+/** White at a full meter, reddening as it drains -- the only on-screen cue the meter exists. */
+function aimColor(meterFraction: number): string {
+  const t = Math.max(0, Math.min(1, meterFraction));
+  const { r: r0, g: g0, b: b0 } = COLORS.aimMarkerEmpty;
+  const { r: r1, g: g1, b: b1 } = COLORS.aimMarkerFull;
+  const r = Math.round(r0 + (r1 - r0) * t);
+  const g = Math.round(g0 + (g1 - g0) * t);
+  const b = Math.round(b0 + (b1 - b0) * t);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** A stable per-enemy phase offset (radians) so identical enemies don't bob in lockstep. */
+function phaseOffset(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return (hash % 1000) / 1000 * Math.PI * 2;
+}
+
+const WALK_STRIDE = 30; // u of horizontal travel per full leg-swing cycle
+const IDLE_BOB_PERIOD_MS = 900;
+const IDLE_BOB_AMOUNT = 2; // px
+const PATROL_BOB_PERIOD_MS = 700;
+const PATROL_SQUASH_AMOUNT = 0.08; // fraction of height
+
+function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Readonly<Enemy>, r: Rect, nowMs: number): void {
+  // Squash-and-stretch bob, purely cosmetic -- derived from wall-clock time
+  // plus a per-id offset, not from patrol phase, so it never has to agree
+  // with the sim's own bounce timing to look right.
+  const phase = nowMs / PATROL_BOB_PERIOD_MS * Math.PI * 2 + phaseOffset(enemy.id);
+  const squash = 1 + Math.sin(phase) * PATROL_SQUASH_AMOUNT;
+  const h = r.h * squash;
+  const w = r.w * (1 + (1 - squash) * 0.5); // slight inverse stretch on width, cartoon squash-and-stretch
+  ctx.fillStyle = COLORS.enemy;
+  ctx.fillRect(r.x - (w - r.w) / 2, r.y + (r.h - h), w, h);
+}
+
+function drawPlayer(ctx: CanvasRenderingContext2D, game: Readonly<Game>, r: Rect, nowMs: number): void {
+  const body = game.body;
+  const aiming = game.lunge.kind === "aiming";
+
+  let drawY = r.y;
+  let h = r.h;
+  let w = r.w;
+
+  if (aiming) {
+    // A slight crouch reads as "holding, ready to fire" without any new art.
+    h = r.h * 0.92;
+    drawY = r.y + (r.h - h);
+  } else if (body.grounded && body.vx === 0) {
+    // Idle bob.
+    drawY += Math.sin((nowMs / IDLE_BOB_PERIOD_MS) * Math.PI * 2) * IDLE_BOB_AMOUNT;
+  } else if (body.grounded && body.vx !== 0) {
+    // Walk-cycle squash, phase-locked to horizontal distance travelled so it
+    // never drifts out of sync with the character's actual footsteps.
+    const phase = (body.x / WALK_STRIDE) * Math.PI * 2;
+    h = r.h * (1 + Math.sin(phase) * 0.04);
+    w = r.w * (1 - Math.sin(phase) * 0.04);
+    drawY = r.y + (r.h - h);
+  }
+
+  ctx.fillStyle = aiming ? COLORS.playerAiming : COLORS.player;
+  ctx.fillRect(r.x - (w - r.w) / 2, drawY, w, h);
+
+  if (!aiming) {
+    // A small notch on the facing edge -- the only visual cue for direction,
+    // since there's no sprite art.
+    ctx.fillStyle = COLORS.sky;
+    const notchX = body.facing > 0 ? r.x + r.w - 6 : r.x;
+    ctx.fillRect(notchX, drawY + 6, 6, 6);
+  }
+}
+
+export function render(
+  ctx: CanvasRenderingContext2D,
+  game: Readonly<Game>,
+  canvasW: number,
+  canvasH: number,
+  nowMs = 0,
+): void {
   const camera = computeCamera(game, canvasW, canvasH);
   const toScreen = (p: Vec2): Vec2 => ({ x: p.x - camera.x, y: p.y - camera.y });
   const rectToScreen = (r: Rect): Rect => ({ x: r.x - camera.x, y: r.y - camera.y, w: r.w, h: r.h });
@@ -60,30 +142,36 @@ export function render(ctx: CanvasRenderingContext2D, game: Readonly<Game>, canv
     ctx.strokeRect(r.x, r.y, r.w, r.h);
   }
 
+  for (const mp of game.movingPlatforms) {
+    const r = rectToScreen(platformRect(mp));
+    ctx.fillStyle = COLORS.platformMoving;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = COLORS.platformMovingEdge;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+  }
+
   const goal = rectToScreen(game.level.goal);
   ctx.fillStyle = COLORS.goal;
   ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
 
   for (const enemy of game.enemies) {
     if (!enemy.alive) continue;
-    const r = rectToScreen(enemyRect(enemy));
-    ctx.fillStyle = COLORS.enemy;
-    ctx.fillRect(r.x, r.y, ENEMY_W, ENEMY_H);
+    drawEnemy(ctx, enemy, rectToScreen(enemyRect(enemy)), nowMs);
   }
 
   if (game.lunge.kind === "aiming") {
     const playerCenter: Vec2 = { x: game.body.x, y: centerYOf(game.body.feetY) };
-    const endpoint = resolveAimEndpoint(
-      playerCenter,
-      game.lunge.aimVector,
-      game.body.facing,
-      game.level.platforms,
-    );
+    const collidable = [...game.level.platforms, ...game.movingPlatforms.map(platformRect)];
+    const endpoint = resolveAimEndpoint(playerCenter, game.lunge.aimVector, game.body.facing, collidable);
     const from = toScreen(playerCenter);
     const to = toScreen(endpoint);
+    const meterFraction = game.body.aimMeter / AIM_METER_MAX_MS;
+    const color = aimColor(meterFraction);
 
     ctx.save();
-    ctx.strokeStyle = COLORS.aimLine;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.55;
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
@@ -92,19 +180,29 @@ export function render(ctx: CanvasRenderingContext2D, game: Readonly<Game>, canv
     ctx.stroke();
     ctx.restore();
 
-    ctx.fillStyle = COLORS.aimMarker;
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(to.x, to.y, 5, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  const player = rectToScreen(bodyRect(game.body));
-  ctx.fillStyle = COLORS.player;
-  ctx.fillRect(player.x, player.y, player.w, player.h);
+  if (game.lunge.kind === "dashing") {
+    // A fading streak behind the dash's current position, back toward where
+    // it launched from -- the whoosh is only 140ms, so this is the one place
+    // "the player is moving fast" actually reads on screen.
+    const from = toScreen(game.lunge.from);
+    const to = toScreen({ x: game.body.x, y: centerYOf(game.body.feetY) });
+    ctx.save();
+    ctx.strokeStyle = COLORS.player;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = PLAYER_H * 0.6;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
+  }
 
-  // A small notch on the facing edge -- the only visual cue for direction,
-  // since there's no sprite art.
-  ctx.fillStyle = COLORS.sky;
-  const notchX = game.body.facing > 0 ? player.x + player.w - 6 : player.x;
-  ctx.fillRect(notchX, player.y + 6, 6, 6);
+  drawPlayer(ctx, game, rectToScreen(bodyRect(game.body)), nowMs);
 }

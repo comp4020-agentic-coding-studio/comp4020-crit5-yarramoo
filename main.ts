@@ -62,7 +62,7 @@ function frame(now: number): void {
     game = newGame(LEVELS[levelIndex]!);
   }
 
-  render(ctx, game, canvas.width, canvas.height);
+  render(ctx, game, canvas.width, canvas.height, now);
 
   restartLink.hidden = game.run.outcome === null;
   if (game.run.outcome === "won") restartLink.textContent = "You win — play again";
