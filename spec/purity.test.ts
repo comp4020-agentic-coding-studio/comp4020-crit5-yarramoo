@@ -23,7 +23,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const PURE_DIRS = ["src/core", "src/sim"];
+// src/anim is here on purpose. It is presentation, not rules, so it could
+// defensibly have lived in src/render/ where nothing is scanned -- but it is
+// pure by construction (time and phase arrive as arguments) and it is the most
+// likely place in the codebase for a stray performance.now() to appear. Being
+// scanned is the only thing that keeps that true.
+const PURE_DIRS = ["src/core", "src/sim", "src/anim"];
 
 function tsFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

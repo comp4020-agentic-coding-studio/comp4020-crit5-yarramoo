@@ -4,6 +4,22 @@
 // the same sweep the real dash uses, so the line drawn on screen and the dash
 // that actually fires can never disagree about where a shot would land.
 
+import {
+  AIM_CROUCH_SCALE,
+  IDLE_BOB_AMOUNT_PX,
+  IDLE_BOB_PERIOD_MS,
+  NOTCH_INSET_PX,
+  NOTCH_PX,
+  PATROL_BOB_PERIOD_MS,
+  PATROL_SQUASH_AMOUNT,
+  PATROL_WIDTH_RATIO,
+  TELEGRAPH_FLASHES,
+  WALK_SQUASH,
+  WALK_STRIDE_U,
+  WALK_WIDTH_RATIO,
+} from "../anim/constants.ts";
+import { hashTurns, wave } from "../anim/ease.ts";
+import { applyPose, IDENTITY, pose, squash, type Pose } from "../anim/pose.ts";
 import type { Rect } from "../core/aabb.ts";
 import type { Vec2 } from "../core/vec.ts";
 import { bodyRect } from "../sim/body.ts";
@@ -42,6 +58,7 @@ const COLORS = {
   player: "#f2c94c",
   playerAiming: "#f2e29c",
   enemy: "#e05c5c",
+  telegraph: "#ffffff",
   goal: "#5ce0a0",
   aimMarkerFull: { r: 255, g: 255, b: 255 },
   aimMarkerEmpty: { r: 224, g: 60, b: 60 },
@@ -58,75 +75,77 @@ function aimColor(meterFraction: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-/** A stable per-enemy phase offset (radians) so identical enemies don't bob in lockstep. */
-function phaseOffset(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return (hash % 1000) / 1000 * Math.PI * 2;
-}
-
-const WALK_STRIDE = 30; // u of horizontal travel per full leg-swing cycle
-const IDLE_BOB_PERIOD_MS = 900;
-const IDLE_BOB_AMOUNT = 2; // px
-const PATROL_BOB_PERIOD_MS = 700;
-const PATROL_SQUASH_AMOUNT = 0.08; // fraction of height
-
-function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Readonly<Enemy>, r: Rect, nowMs: number): void {
-  if (enemy.kind === "lunger" && enemy.lungeState === "telegraph") {
-    // A fast, accelerating flash reads as "about to fire" -- the only warning
-    // before a lunger's dash, same fairness contract as the player reading an
-    // aim line before committing.
-    const t = enemy.lungeElapsedMs / ENEMY_LUNGE_TELEGRAPH_MS;
-    const flashOn = Math.floor(t * 16) % 2 === 0;
-    ctx.fillStyle = flashOn ? "#ffffff" : COLORS.enemy;
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    return;
-  }
+/** How an enemy is deformed this frame. Pure geometry -- colour is enemyFill's job. */
+function enemyPose(enemy: Readonly<Enemy>, nowMs: number): Pose {
+  // A telegraphing lunger holds its shape. The flash is the entire warning the
+  // player gets before a dash, and a bob layered over it only muddies the one
+  // frame-accurate cue they have to read.
+  if (enemy.kind === "lunger" && enemy.lungeState === "telegraph") return IDENTITY;
 
   // Squash-and-stretch bob, purely cosmetic -- derived from wall-clock time
   // plus a per-id offset, not from patrol phase, so it never has to agree
   // with the sim's own bounce timing to look right.
-  const phase = nowMs / PATROL_BOB_PERIOD_MS * Math.PI * 2 + phaseOffset(enemy.id);
-  const squash = 1 + Math.sin(phase) * PATROL_SQUASH_AMOUNT;
-  const h = r.h * squash;
-  const w = r.w * (1 + (1 - squash) * 0.5); // slight inverse stretch on width, cartoon squash-and-stretch
-  ctx.fillStyle = COLORS.enemy;
-  ctx.fillRect(r.x - (w - r.w) / 2, r.y + (r.h - h), w, h);
+  const turns = nowMs / PATROL_BOB_PERIOD_MS + hashTurns(enemy.id);
+  return squash(wave(turns) * PATROL_SQUASH_AMOUNT, PATROL_WIDTH_RATIO);
+}
+
+function enemyFill(enemy: Readonly<Enemy>): string {
+  if (enemy.kind === "lunger" && enemy.lungeState === "telegraph") {
+    // A fast, accelerating flash reads as "about to fire" -- the same fairness
+    // contract as the player reading an aim line before committing.
+    const t = enemy.lungeElapsedMs / ENEMY_LUNGE_TELEGRAPH_MS;
+    return Math.floor(t * TELEGRAPH_FLASHES * 2) % 2 === 0 ? COLORS.telegraph : COLORS.enemy;
+  }
+  return COLORS.enemy;
+}
+
+function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Readonly<Enemy>, r: Rect, nowMs: number): void {
+  const d = applyPose(r, enemyPose(enemy, nowMs));
+  ctx.fillStyle = enemyFill(enemy);
+  ctx.fillRect(d.x, d.y, d.w, d.h);
+}
+
+/** How the player is deformed this frame. One pose out, no drawing. */
+function playerPose(game: Readonly<Game>, nowMs: number): Pose {
+  const body = game.body;
+
+  // A slight crouch reads as "holding, ready to fire" without any new art.
+  if (game.lunge.kind === "aiming") return pose({ scaleY: AIM_CROUCH_SCALE });
+
+  // Mid-dash the body is snapped along the dash segment and stepBody never
+  // runs, so `grounded` and `vx` still hold whatever they were before launch
+  // (spec/levels.test.ts's settleAfterDash documents the same staleness from
+  // the sim side). A dash fired from standing therefore satisfied
+  // `grounded && vx === 0` and used to idle-bob its way across the screen
+  // behind the streak. The dash has its own motion; it needs no pose.
+  if (game.lunge.kind === "dashing") return IDENTITY;
+
+  // Airborne: undeformed, and now explicitly so rather than by falling off the
+  // end of a chain with no else.
+  if (!body.grounded) return IDENTITY;
+
+  if (body.vx === 0) return pose({ dy: wave(nowMs / IDLE_BOB_PERIOD_MS) * IDLE_BOB_AMOUNT_PX });
+
+  // Walk-cycle squash, phase-locked to horizontal distance travelled so it
+  // never drifts out of sync with the character's actual footsteps.
+  return squash(wave(body.x / WALK_STRIDE_U) * WALK_SQUASH, WALK_WIDTH_RATIO);
 }
 
 function drawPlayer(ctx: CanvasRenderingContext2D, game: Readonly<Game>, r: Rect, nowMs: number): void {
-  const body = game.body;
   const aiming = game.lunge.kind === "aiming";
-
-  let drawY = r.y;
-  let h = r.h;
-  let w = r.w;
-
-  if (aiming) {
-    // A slight crouch reads as "holding, ready to fire" without any new art.
-    h = r.h * 0.92;
-    drawY = r.y + (r.h - h);
-  } else if (body.grounded && body.vx === 0) {
-    // Idle bob.
-    drawY += Math.sin((nowMs / IDLE_BOB_PERIOD_MS) * Math.PI * 2) * IDLE_BOB_AMOUNT;
-  } else if (body.grounded && body.vx !== 0) {
-    // Walk-cycle squash, phase-locked to horizontal distance travelled so it
-    // never drifts out of sync with the character's actual footsteps.
-    const phase = (body.x / WALK_STRIDE) * Math.PI * 2;
-    h = r.h * (1 + Math.sin(phase) * 0.04);
-    w = r.w * (1 - Math.sin(phase) * 0.04);
-    drawY = r.y + (r.h - h);
-  }
+  const d = applyPose(r, playerPose(game, nowMs));
 
   ctx.fillStyle = aiming ? COLORS.playerAiming : COLORS.player;
-  ctx.fillRect(r.x - (w - r.w) / 2, drawY, w, h);
+  ctx.fillRect(d.x, d.y, d.w, d.h);
 
   if (!aiming) {
     // A small notch on the facing edge -- the only visual cue for direction,
-    // since there's no sprite art.
+    // since there's no sprite art. Measured off the DEFORMED rect: taking it
+    // from the undeformed one left it drifting a fraction off the body's edge
+    // through the walk cycle.
     ctx.fillStyle = COLORS.sky;
-    const notchX = body.facing > 0 ? r.x + r.w - 6 : r.x;
-    ctx.fillRect(notchX, drawY + 6, 6, 6);
+    const notchX = game.body.facing > 0 ? d.x + d.w - NOTCH_PX : d.x;
+    ctx.fillRect(notchX, d.y + NOTCH_INSET_PX, NOTCH_PX, NOTCH_PX);
   }
 }
 
