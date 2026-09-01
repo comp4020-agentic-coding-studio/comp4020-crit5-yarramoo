@@ -7,7 +7,7 @@
 import type { Rect } from "../core/aabb.ts";
 import type { Vec2 } from "../core/vec.ts";
 import { bodyRect } from "../sim/body.ts";
-import { AIM_METER_MAX_MS, PLAYER_H } from "../sim/constants.ts";
+import { AIM_METER_MAX_MS, ENEMY_LUNGE_TELEGRAPH_MS, PLAYER_H } from "../sim/constants.ts";
 import { enemyRect, type Enemy } from "../sim/enemy.ts";
 import type { Game } from "../sim/game.ts";
 import { resolveAimEndpoint } from "../sim/lunge.ts";
@@ -72,6 +72,17 @@ const PATROL_BOB_PERIOD_MS = 700;
 const PATROL_SQUASH_AMOUNT = 0.08; // fraction of height
 
 function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Readonly<Enemy>, r: Rect, nowMs: number): void {
+  if (enemy.kind === "lunger" && enemy.lungeState === "telegraph") {
+    // A fast, accelerating flash reads as "about to fire" -- the only warning
+    // before a lunger's dash, same fairness contract as the player reading an
+    // aim line before committing.
+    const t = enemy.lungeElapsedMs / ENEMY_LUNGE_TELEGRAPH_MS;
+    const flashOn = Math.floor(t * 16) % 2 === 0;
+    ctx.fillStyle = flashOn ? "#ffffff" : COLORS.enemy;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    return;
+  }
+
   // Squash-and-stretch bob, purely cosmetic -- derived from wall-clock time
   // plus a per-id offset, not from patrol phase, so it never has to agree
   // with the sim's own bounce timing to look right.

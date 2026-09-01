@@ -12,7 +12,7 @@ import { overlaps, type Rect } from "../core/aabb.ts";
 import type { Vec2 } from "../core/vec.ts";
 import { bodyRect, newBody, stepBody, type Body, type BodyInput } from "./body.ts";
 import { PLAYER_H, VOID_Y } from "./constants.ts";
-import { applyLungeSweep, enemyRect, stepEnemy, type Enemy } from "./enemy.ts";
+import { applyLungeSweep, enemyRect, stepEnemy, stepLungerEnemy, type Enemy } from "./enemy.ts";
 import type { Level } from "./level.ts";
 import { dashPosition, idleLunge, stepLunge, type LungeInput, type LungeState } from "./lunge.ts";
 import { platformRect, stepMovingPlatform, type MovingPlatform } from "./platform.ts";
@@ -90,7 +90,9 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
     // platforms frozen. Nothing below moves this frame (the meter, drained
     // above, is the one exception -- it's the cost of maintaining the freeze).
   } else {
-    enemies = enemies.map((e) => stepEnemy(e, dtSec));
+    enemies = enemies.map((e) =>
+      e.kind === "lunger" ? stepLungerEnemy(e, dtSec, playerCenter, platformsThisFrame) : stepEnemy(e, dtSec),
+    );
     const steppedMovingPlatforms = movingPlatforms.map((mp) => stepMovingPlatform(mp, dtSec));
 
     if (lungeResult.state.kind === "dashing") {
