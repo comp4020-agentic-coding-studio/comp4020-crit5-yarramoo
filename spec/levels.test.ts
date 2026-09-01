@@ -130,4 +130,11 @@ describe("level 3: two mandatory timed snipes bracketing a ferry crossing", () =
     g = runUntil(g, (s) => isOver(s.run), () => walk(1));
     expect(g.run.outcome).toBe("won");
   });
+
+  it("walking into the first gate enemy without killing it is fatal", () => {
+    let g: Game = newGame(buildLevel3());
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1)); // walk straight into gate3a, no lunge
+    expect(g.run.outcome).toBe("lost");
+    expect(g.enemies.find((e) => e.id === "gate3a")!.alive).toBe(true);
+  });
 });
