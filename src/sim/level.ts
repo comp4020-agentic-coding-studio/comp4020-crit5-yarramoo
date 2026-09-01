@@ -3,7 +3,7 @@
 // be retuned once the level is actually played (see the plan's build order).
 
 import type { Rect } from "../core/aabb.ts";
-import { newEnemy, newVerticalEnemy, type Enemy } from "./enemy.ts";
+import { newEnemy, newHopperEnemy, newLungerEnemy, newVerticalEnemy, type Enemy } from "./enemy.ts";
 import { MAX_JUMP_DISTANCE } from "./constants.ts";
 import { newMovingPlatform, type MovingPlatform } from "./platform.ts";
 
@@ -156,4 +156,41 @@ export function buildLevel3(): Level {
   };
 }
 
-export const LEVELS: Level[] = [buildLevel(), buildLevel2(), buildLevel3()];
+export function buildLevel4(): Level {
+  // Bonus beat: the stretch-goal enemy types, each shown off for what makes
+  // them distinct from ordinary patrol/vertical enemies rather than reusing
+  // a gate recipe wholesale.
+  //
+  // The hopper sits in the open (no ceiling): it spends most of its cycle
+  // low enough to touch a walking player, but eases up to HOPPER_HEIGHT
+  // (90u) above the floor and lingers there (the sine curve is flattest at
+  // its peak) -- comfortably enough clearance for PLAYER_H (36u) to walk
+  // underneath untouched. Reading that hangtime and walking under it is the
+  // whole beat; killing it with a lunge also works, but isn't required.
+  // One continuous floor -- this level's beats are about timing and range,
+  // not traversal, so there's no gap to cross.
+  const floor4: Rect = { x: -100, y: GROUND_Y, w: 1800, h: 300 }; // spans -100..1700
+  const hopper = newHopperEnemy("hopper4", 400, GROUND_Y);
+
+  // The lunger is dormant and silent until the player is within
+  // ENEMY_LUNGE_RANGE_X (260u) and roughly level -- so it reads as an
+  // ambush, not a gate. Placed with clear runway on both sides so an expert
+  // script can approach to just outside its trigger range, wait for the
+  // telegraph flash, and snipe it before the dash ever lands -- while a
+  // script that just keeps walking gets caught by the dash instead.
+  const lunger = newLungerEnemy("lunger4", 1250, GROUND_Y);
+
+  const goal: Rect = { x: 1500, y: 560, w: 60, h: 40 };
+  const bounds: Rect = { x: -150, y: 250, w: 1900, h: 750 };
+
+  return {
+    platforms: [floor4],
+    movingPlatforms: [],
+    enemies: [hopper, lunger],
+    goal,
+    spawn: { x: 60, feetY: GROUND_Y },
+    bounds,
+  };
+}
+
+export const LEVELS: Level[] = [buildLevel(), buildLevel2(), buildLevel3(), buildLevel4()];

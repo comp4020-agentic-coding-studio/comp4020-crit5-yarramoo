@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { isOver } from "../src/sim/run.ts";
-import { buildLevel2, buildLevel3 } from "../src/sim/level.ts";
+import { buildLevel2, buildLevel3, buildLevel4 } from "../src/sim/level.ts";
 import { newGame, stepGame, type Game, type GameInput } from "../src/sim/game.ts";
 import { AIM_METER_MAX_MS, PLAYER_H, ENEMY_H } from "../src/sim/constants.ts";
 
@@ -136,5 +136,37 @@ describe("level 3: two mandatory timed snipes bracketing a ferry crossing", () =
     g = runUntil(g, (s) => isOver(s.run), () => walk(1)); // walk straight into gate3a, no lunge
     expect(g.run.outcome).toBe("lost");
     expect(g.enemies.find((e) => e.id === "gate3a")!.alive).toBe(true);
+  });
+});
+
+describe("level 4: a hopper hazard and a lunger ambush", () => {
+  it("an expert script snipes both new enemy types and reaches the goal", () => {
+    let g: Game = newGame(buildLevel4());
+
+    // The hopper: kill it with a lunge from a safe standoff -- reading its
+    // current bob phase via aimAt, same as the bobbing gates in level 2/3.
+    g = runUntil(g, (s) => s.body.x >= 250, () => walk(1));
+    g = fireLunge(g, aimAt(g, "hopper4"));
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    expect(g.enemies.find((e) => e.id === "hopper4")!.alive).toBe(false);
+
+    // The lunger: stop just outside its trigger range (260u) so it stays
+    // dormant, then snipe it before it ever gets a chance to dash.
+    g = runUntil(g, (s) => s.body.x >= 970, () => walk(1));
+    expect(g.enemies.find((e) => e.id === "lunger4")!.lungeState).toBe("patrol");
+    g = fireLunge(g, aimAt(g, "lunger4"));
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    expect(g.enemies.find((e) => e.id === "lunger4")!.alive).toBe(false);
+
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe("won");
+  });
+
+  it("walking straight through without ever responding to the lunger is fatal", () => {
+    let g: Game = newGame(buildLevel4());
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1)); // never aims, never stops
+    expect(g.run.outcome).toBe("lost");
   });
 });
