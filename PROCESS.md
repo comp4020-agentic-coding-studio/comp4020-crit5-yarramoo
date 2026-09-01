@@ -1,61 +1,80 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
 ## What I built
 
-One paragraph: the thing, and the idea behind it.
+A tiny side-view platformer built around one mechanic: hold the mouse button to
+freeze time completely (gravity off, enemies frozen mid-patrol) while a free
+360° aim line tracks the pointer, then release to dash a fixed distance along
+that line. The dash kills any enemy it passes through without slowing, but
+still stops dead against solid terrain -- so an enemy can be planted as bait,
+tempting a player who fires straight at it to overshoot the platform they were
+standing on. There's no on-screen text; the time-freeze itself is the tutorial,
+and a forced corridor early in the level makes trying "the other button" the
+only way forward.
 
 ## The moments that mattered
 
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
+### 1. The one rule the whole design depends on, made into the flagship test
 
-1. **what happened** --- the problem, or the thing that went wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
+The bait trap only works if the dash's endpoint is a pure function of solid
+terrain -- killing an enemy on the way must never shorten or stop it, or a
+player who fires "through" the bait would be rewarded, not punished. Rather
+than trust that `resolveAimEndpoint`'s sweep did this by construction, I wrote
+the test first: dash toward an enemy standing clear of any wall and assert the
+player travels the *full* fixed distance past where the enemy stood, then
+separately assert a dash toward a bare wall stops short of it. Both passed
+against the first real implementation, but the test is what makes that a
+verified property rather than an assumption.
 
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** --- the standards and checks your work has to satisfy
---- rather than in a retry: a rule added to `CLAUDE.md`, a check wired up, an
-attempt thrown away. Retrying until it passes is the routine case, and changing
-what the work runs against is the skilled one.
+Cited: [`42cceca`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-yarramoo/commit/42cceca)
 
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
+### 2. Two bugs invisible to 77 green tests, found by actually playing
 
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
+CLAUDE.md's "open the page and look at it" rule earned its keep twice in one
+sitting. Aiming near-horizontally while standing on a platform collapsed every
+lunge to zero length -- the player's center sits exactly on the swept boundary
+of the platform they're standing on, so the existing (correct) flush-convention
+sweep read that as an instant block. Every test vector so far had used an
+exact horizontal or steep angle, so nothing caught it. And on touch, releasing
+a drag nulled the aim pointer *before* the game loop's next read, so every
+touch-fired dash used a stale canvas-center default instead of the aimed
+direction. Neither was a logic error the suite could see; both were "hold the
+mouse where a real hand would" problems. Fixed by excluding the currently-
+supporting platform from the sweep, and by tracking the last aim position
+separately from the live pointer.
 
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
+Cited: [`f40d919`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-yarramoo/commit/f40d919)
 
-> the prompt, verbatim
+### 3. A test suite that stayed green while a live playthrough died
 
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
+After fixing (2), a scripted Playwright playthrough still died lunging through
+the gate enemy, even though `spec/game.test.ts`'s expert script passed. Rather
+than guess, I hooked `requestAnimationFrame` to sample the live game state every
+frame and diffed the exact transition: the player landed safely, then the very
+next physics frame catapulted it to `x=912`. The cause was `stepBody`'s
+horizontal collision ternary having no "didn't move" case -- a lunge landing
+with a downward y-component arrives embedded in the platform it just landed on
+(deliberate, per fix 2) with `vx === 0`, and the ternary read that stationary
+overlap as a leftward approach, ejecting the player out the platform's *far*
+edge. No existing test exercised a zero-velocity embedded body, so this needed
+a live frame trace, not a failing assertion, to find.
+
+Cited: [`fac768b`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-yarramoo/commit/fac768b)
+
+### 4. The mandatory playtest-driven tuning change
+
+Firing a genuinely mouse-aimed (not hand-typed) shot across the beat-3 gap kept
+landing short: any real aim has a slight downward tilt, and that tilt eats into
+the dash's horizontal reach enough to clip the far platform's vertical face
+instead of clearing onto its top. `GAP1_WIDTH` had only 40 units of slack under
+`LUNGE_DISTANCE`; I narrowed it to give a realistically-imprecise aim more room,
+and re-verified with the same Playwright rig driving real mouse and keyboard
+events against the running dev server end-to-end -- gate killed, gap cleared,
+bait survived by jumping over it, vertical beat landed on the far ledge, goal
+reached, `outcome: "won"`. That live run, not just `pnpm check`, is what
+confirmed the fix.
+
+Cited: [`4b85b75`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-yarramoo/commit/4b85b75)
 
 ## Before you ship
 
