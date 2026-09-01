@@ -8,9 +8,19 @@ import { MAX_JUMP_DISTANCE } from "./constants.ts";
 
 export const GROUND_Y = 600;
 
-/** Beat 3's pure traversal gap: wider than any jump can cross, narrower than a lunge. */
-export const GAP1_WIDTH = 280;
-export const GAP1_START = 900;
+/**
+ * Beat 3's pure traversal gap: wider than any jump can cross, narrower than
+ * a lunge. Was 280 (only 40u of slack under LUNGE_DISTANCE) until a live
+ * mouse-aimed playtest showed the problem with that: a real aim is never
+ * perfectly horizontal, and any downward tilt eats into the dash's
+ * horizontal reach. A shot fired confidently across the gap would land with
+ * its box straddling floor2's left FACE instead of its top -- read as a
+ * blocked collision, not a landing -- and the player fell straight through
+ * since they were never horizontally over solid ground. Narrowed to 220 so
+ * a realistically-imprecise aim still clears well onto floor2's surface.
+ */
+export const GAP1_WIDTH = 220;
+export const GAP1_START = 960;
 export const GAP1_END = GAP1_START + GAP1_WIDTH;
 
 export interface Level {
@@ -29,7 +39,7 @@ export function buildLevel(): Level {
   // Beat 1-2-3: one long floor. Beat 2's low ceiling sits over a stationary
   // enemy, blocking the single walkable lane -- there is no side to walk
   // around it, so the only way through is to lunge-kill it.
-  const floor1: Rect = { x: -100, y: GROUND_Y, w: 1000, h: 300 };
+  const floor1: Rect = { x: -100, y: GROUND_Y, w: GAP1_START + 100, h: 300 }; // right edge flush with the gap
   const tunnelCeiling: Rect = { x: 560, y: -2000, w: 160, h: 2550 }; // bottom edge at y=550
   const gateEnemy = newEnemy("gate", 640, GROUND_Y, 640, 640);
 
