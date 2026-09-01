@@ -3,9 +3,9 @@
 // be retuned once the level is actually played (see the plan's build order).
 
 import type { Rect } from "../core/aabb.ts";
-import { newEnemy, type Enemy } from "./enemy.ts";
+import { newEnemy, newVerticalEnemy, type Enemy } from "./enemy.ts";
 import { MAX_JUMP_DISTANCE } from "./constants.ts";
-import type { MovingPlatform } from "./platform.ts";
+import { newMovingPlatform, type MovingPlatform } from "./platform.ts";
 
 export const GROUND_Y = 600;
 
@@ -88,3 +88,72 @@ export function buildLevel(): Level {
 // GAP1_WIDTH must exceed MAX_JUMP_DISTANCE. Exported so the test can assert
 // it directly against the real constant rather than a copied number.
 export const GAP1_EXCEEDS_MAX_JUMP = GAP1_WIDTH > MAX_JUMP_DISTANCE;
+
+/**
+ * The vertical-gate recipe shared by level 2 and level 3: a full-height
+ * ceiling paired with a vertically-bobbing enemy whose patrol band leaves at
+ * most (channel height - enemy height) / 2 = 11u of clearance on either side
+ * at any phase -- well under PLAYER_H (36u) -- so there is no bob phase a
+ * player can walk through untouched. The only way past is a lunge-kill.
+ */
+function verticalGate(id: string, x: number): { ceiling: Rect; enemy: Enemy } {
+  return {
+    ceiling: { x, y: -2000, w: 160, h: 2550 }, // bottom edge at y=550
+    enemy: newVerticalEnemy(id, x + 80, 589, 578, 600),
+  };
+}
+
+export function buildLevel2(): Level {
+  // Beat 1: a single ferry is the only way across -- the 700u gap it spans
+  // is far past both MAX_JUMP_DISTANCE and LUNGE_DISTANCE, so waiting for it
+  // and riding it is the only option. It starts flush against floor2a (so
+  // the very first ride is available immediately) and its far bound is
+  // flush against floor2b.
+  const floor2a: Rect = { x: -100, y: GROUND_Y, w: 400, h: 300 }; // spans -100..300
+  const ferry = newMovingPlatform("ferry2", "x", 300, GROUND_Y, 140, 20, 300, 860, 90);
+  const floor2b: Rect = { x: 1000, y: GROUND_Y, w: 1200, h: 300 }; // spans 1000..2200
+
+  // Beat 2: the first mandatory timed snipe -- a bobbing enemy blocking a
+  // low tunnel. Aiming freezes the bob along with everything else, so the
+  // "tricky timing" is in reading the bob and committing, not in outrunning
+  // the meter -- but the meter still caps how long that commitment can wait.
+  const gate = verticalGate("bobber", 1300);
+
+  const goal: Rect = { x: 1900, y: 560, w: 60, h: 40 };
+  const bounds: Rect = { x: -150, y: 250, w: 2500, h: 750 };
+
+  return {
+    platforms: [floor2a, floor2b, gate.ceiling],
+    movingPlatforms: [ferry],
+    enemies: [gate.enemy],
+    goal,
+    spawn: { x: 60, feetY: GROUND_Y },
+    bounds,
+  };
+}
+
+export function buildLevel3(): Level {
+  // Two mandatory timed snipes bracketing a ferry crossing, each with its
+  // own fresh aimMeter (landing between them resets it) -- the "multiple
+  // lunges, each individually time-capped" beat the meter was built for.
+  const floor3a: Rect = { x: -100, y: GROUND_Y, w: 800, h: 300 }; // spans -100..700
+  const gateA = verticalGate("gate3a", 340);
+
+  const ferry = newMovingPlatform("ferry3", "x", 700, GROUND_Y, 150, 20, 700, 1050, 85);
+  const floor3b: Rect = { x: 1200, y: GROUND_Y, w: 800, h: 300 }; // spans 1200..2000
+  const gateB = verticalGate("gate3b", 1400);
+
+  const goal: Rect = { x: 1900, y: 560, w: 60, h: 40 };
+  const bounds: Rect = { x: -150, y: 250, w: 2300, h: 750 };
+
+  return {
+    platforms: [floor3a, gateA.ceiling, floor3b, gateB.ceiling],
+    movingPlatforms: [ferry],
+    enemies: [gateA.enemy, gateB.enemy],
+    goal,
+    spawn: { x: 60, feetY: GROUND_Y },
+    bounds,
+  };
+}
+
+export const LEVELS: Level[] = [buildLevel(), buildLevel2(), buildLevel3()];
