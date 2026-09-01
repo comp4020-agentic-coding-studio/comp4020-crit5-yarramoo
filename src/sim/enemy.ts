@@ -10,14 +10,17 @@ import type { Rect } from "../core/aabb.ts";
 import { rectAt, sweepTouches } from "../core/aabb.ts";
 import type { Vec2 } from "../core/vec.ts";
 import { ENEMY_H, ENEMY_PATROL_SPEED, ENEMY_W, PLAYER_H, PLAYER_W } from "./constants.ts";
+import { bounce } from "./oscillate.ts";
 
 export interface Enemy {
   id: string;
   x: number; // center x
   feetY: number; // bottom of the hitbox
-  patrolMinX: number;
-  patrolMaxX: number;
-  vx: number;
+  /** Which coordinate patrolMin/patrolMax/v bounce along. */
+  axis: "x" | "y";
+  patrolMin: number;
+  patrolMax: number;
+  v: number;
   alive: boolean;
 }
 
@@ -28,28 +31,32 @@ export function newEnemy(
   patrolMinX: number,
   patrolMaxX: number,
 ): Enemy {
-  return { id, x, feetY, patrolMinX, patrolMaxX, vx: ENEMY_PATROL_SPEED, alive: true };
+  return { id, x, feetY, axis: "x", patrolMin: patrolMinX, patrolMax: patrolMaxX, v: ENEMY_PATROL_SPEED, alive: true };
+}
+
+export function newVerticalEnemy(
+  id: string,
+  x: number,
+  feetY: number,
+  patrolMinY: number,
+  patrolMaxY: number,
+): Enemy {
+  return { id, x, feetY, axis: "y", patrolMin: patrolMinY, patrolMax: patrolMaxY, v: ENEMY_PATROL_SPEED, alive: true };
 }
 
 export function enemyRect(e: Readonly<Enemy>): Rect {
   return rectAt(e.x, e.feetY, ENEMY_W, ENEMY_H);
 }
 
-/** Bounce between patrolMinX and patrolMaxX at a constant speed. A no-op once dead. */
+/** Bounce between patrolMin and patrolMax along the enemy's axis, at a constant speed. A no-op once dead. */
 export function stepEnemy(e: Readonly<Enemy>, dtSec: number): Enemy {
   if (!e.alive) return e;
 
-  let x = e.x + e.vx * dtSec;
-  let vx = e.vx;
-  if (x <= e.patrolMinX) {
-    x = e.patrolMinX;
-    vx = ENEMY_PATROL_SPEED;
-  } else if (x >= e.patrolMaxX) {
-    x = e.patrolMaxX;
-    vx = -ENEMY_PATROL_SPEED;
-  }
+  const before = e.axis === "x" ? e.x : e.feetY;
+  const advanced = before + e.v * dtSec;
+  const { pos, v } = bounce(advanced, e.v, e.patrolMin, e.patrolMax, ENEMY_PATROL_SPEED);
 
-  return { ...e, x, vx };
+  return e.axis === "x" ? { ...e, x: pos, v } : { ...e, feetY: pos, v };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyLungeSweep, newEnemy, stepEnemy } from "../src/sim/enemy.ts";
+import { applyLungeSweep, newEnemy, newVerticalEnemy, stepEnemy } from "../src/sim/enemy.ts";
 import { ENEMY_PATROL_SPEED } from "../src/sim/constants.ts";
 
 describe("stepEnemy", () => {
@@ -24,6 +24,18 @@ describe("stepEnemy", () => {
     const e = newEnemy("e1", 150, 0, 0, 1000);
     const after = stepEnemy(e, 1);
     expect(Math.abs(after.x - e.x)).toBeCloseTo(ENEMY_PATROL_SPEED);
+  });
+});
+
+describe("newVerticalEnemy", () => {
+  it("bounces along feetY instead of x, leaving x fixed", () => {
+    let e = newVerticalEnemy("hopper", 300, 100, 100, 300);
+    for (let i = 0; i < 600; i++) {
+      e = stepEnemy(e, 1 / 60);
+      expect(e.x).toBe(300);
+      expect(e.feetY).toBeGreaterThanOrEqual(100);
+      expect(e.feetY).toBeLessThanOrEqual(300);
+    }
   });
 });
 
