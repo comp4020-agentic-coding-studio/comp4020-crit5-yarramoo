@@ -75,9 +75,11 @@ export function resolveAimEndpoint(
 /**
  * Advance the lunge state machine by one frame.
  *
- * `dashCharge` gates entering `aiming` from `idle`: with no charge, holding
- * the button does nothing at all -- no freeze, no line. That silence is how a
- * player discovers the charge economy without being told about it.
+ * `canAim` gates entering `aiming` from `idle`: when it's false, holding the
+ * button does nothing at all -- no freeze, no line. That silence is how a
+ * player discovers the economy without being told about it. What feeds it is
+ * the caller's business (game.ts combines the dash charge with standing on a
+ * foothold); this module only needs to know whether an aim may begin.
  *
  * Returns the new state, and -- only on the frame a dash fires -- the
  * resolved (from, to) segment, so the caller can apply it against enemies
@@ -88,12 +90,12 @@ export function stepLunge(
   input: LungeInput,
   playerPos: Vec2,
   facing: 1 | -1,
-  dashCharge: boolean,
+  canAim: boolean,
   platforms: readonly Rect[],
   dtMs: number,
 ): { state: LungeState; fired: { from: Vec2; to: Vec2 } | null } {
   if (state.kind === "idle") {
-    if (input.held && dashCharge) {
+    if (input.held && canAim) {
       return { state: { kind: "aiming", aimVector: input.aimVector }, fired: null };
     }
     return { state, fired: null };

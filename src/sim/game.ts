@@ -35,7 +35,12 @@ export interface GameInput {
 export function newGame(level: Level): Game {
   return {
     level,
-    body: newBody(level.spawn.x, level.spawn.feetY),
+    // Spawned standing. A Level's spawn is on solid ground by contract, and
+    // stepBody would work that out for itself one frame later -- but "one frame
+    // later" became visible once a lunge required a foothold: pressing on the
+    // very first frame of a level did nothing, because the body had not yet
+    // fallen the zero distance onto the floor it was already resting on.
+    body: { ...newBody(level.spawn.x, level.spawn.feetY), grounded: true },
     enemies: level.enemies,
     movingPlatforms: level.movingPlatforms,
     lunge: idleLunge(),
@@ -71,12 +76,21 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
   // moving-platform positions, rather than each seeing a different instant.
   const platformsThisFrame = collidablePlatforms(game.level, game.movingPlatforms);
 
+  // A lunge is launched from a foothold, never from open air: solid ground, or
+  // a wall the body is currently hanging on. The charge alone used to be the
+  // whole gate, which meant one free mid-air lunge per landing -- fine while
+  // every level was a floor, but it makes a fall a place to think rather than a
+  // consequence. Requiring contact is what turns "where can I reach from here"
+  // into a question with an answer, and it is why walls are worth having.
+  const onFoothold = game.body.grounded || game.body.wallSliding;
+  const canAim = game.body.dashCharge && onFoothold;
+
   const lungeResult = stepLunge(
     game.lunge,
     meterExpired ? { ...input.lunge, held: false } : input.lunge,
     playerCenter,
     game.body.facing,
-    game.body.dashCharge,
+    canAim,
     platformsThisFrame,
     dtMs,
   );

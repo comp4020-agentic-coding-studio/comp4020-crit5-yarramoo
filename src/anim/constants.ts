@@ -28,6 +28,17 @@ export const IDLE_BOB_AMOUNT_PX = 2;
 /** Held-and-ready: a slight crouch, as a fraction of full height. */
 export const AIM_CROUCH_SCALE = 0.92;
 
+// Clinging to a wall. The body presses thin against the face and stretches
+// along it -- the silhouette alone should say "attached", from any distance and
+// without a single word. The slow pulse on top is the part that says the more
+// useful thing: this is a foothold, the charge is back, a lunge can start here.
+export const WALL_CLING_SQUEEZE = 0.3; // fraction of width lost
+export const WALL_CLING_STRETCH = 0.08; // fraction of height gained
+/** Lean into the wall, in screen pixels, so contact reads as contact. */
+export const WALL_CLING_LEAN_PX = 3;
+export const WALL_CLING_PULSE_PERIOD_MS = 420;
+export const WALL_CLING_PULSE = 0.05; // fraction of height
+
 export const PATROL_BOB_PERIOD_MS = 700;
 /** Fraction of height. Softer than the player's walk -- see PATROL_WIDTH_RATIO. */
 export const PATROL_SQUASH_AMOUNT = 0.08;

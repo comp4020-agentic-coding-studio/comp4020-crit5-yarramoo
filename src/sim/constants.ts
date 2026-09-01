@@ -21,6 +21,19 @@ export const LUNGE_SPEED = LUNGE_DISTANCE / (LUNGE_DURATION_MS / 1000); // u/s, 
 
 export const AIM_DEADZONE = 8; // u; below this, snap to last facing rather than divide-by-zero
 
+/**
+ * How fast a body slides while pressed against a wall, in u/s.
+ *
+ * A wall is the second foothold: like solid ground, touching one refreshes both
+ * the dash charge and the aim meter, and a lunge can only ever be started from
+ * one or the other. The cap is what makes that usable -- a free fall past a
+ * 300u wall face is over in 0.65s and accelerating, which is a reflex test, not
+ * a decision. At 150 u/s the same face is a steady 2s of hanging, long enough
+ * to read the room and pick a line, and slow enough that the descent still
+ * costs something.
+ */
+export const WALL_SLIDE_SPEED = 150;
+
 // The aim-freeze resource: drains while aiming, resets only on landing.
 // Existing scripted holds run ~16-300ms, so this stays generous enough that
 // ordinary play never brushes it -- it only matters in levels built to test

@@ -84,11 +84,22 @@ describe("full playthroughs", () => {
     expect(g.enemies.find((e) => e.id === "bait")!.alive).toBe(true); // walked past, never touched
     expect(g.run.outcome).toBeNull();
 
+    // Land before firing. Beat 4 is cleared by jumping, and a lunge now needs a
+    // foothold -- solid ground or a wall -- so the shot cannot be taken out of
+    // the air at the end of that jump the way it used to be.
+    g = runUntil(g, (s) => s.body.grounded, () => walk(0));
+
     // Beat 5: the vertical beat. A steep up-right lunge clears floor3's
     // corner; gravity settles the landing onto its top surface.
     const angle = (74 * Math.PI) / 180;
     g = fireLunge(g, { x: Math.cos(angle) * 500, y: -Math.sin(angle) * 500 });
     g = waitForDashToEnd(g);
+    // One ordinary physics frame first: the frame a dash ends, game.ts snaps the
+    // body to the endpoint without running stepBody, so `grounded` still holds
+    // its pre-launch value. Waiting on it directly used to work only because
+    // this shot was fired mid-jump and that stale value was false. Fired from a
+    // foothold it is true, and the wait would return instantly, at the apex.
+    g = stepGame(g, walk(0), DT_MS);
     g = runUntil(g, (s) => s.body.grounded, () => walk(0));
     expect(g.body.feetY).toBeCloseTo(380);
 

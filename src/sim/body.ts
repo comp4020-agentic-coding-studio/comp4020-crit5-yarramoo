@@ -5,7 +5,15 @@
 
 import type { Rect } from "../core/aabb.ts";
 import { overlaps, rectAt } from "../core/aabb.ts";
-import { AIM_METER_MAX_MS, GRAVITY, JUMP_SPEED, MOVE_SPEED, PLAYER_H, PLAYER_W } from "./constants.ts";
+import {
+  AIM_METER_MAX_MS,
+  GRAVITY,
+  JUMP_SPEED,
+  MOVE_SPEED,
+  PLAYER_H,
+  PLAYER_W,
+  WALL_SLIDE_SPEED,
+} from "./constants.ts";
 
 export interface Body {
   x: number; // center x
@@ -14,19 +22,37 @@ export interface Body {
   vy: number;
   facing: 1 | -1;
   grounded: boolean;
-  /** One lunge charge, refreshed only by touching solid ground. */
+  /** One lunge charge, refreshed by touching solid ground -- or a wall. */
   dashCharge: boolean;
   /**
    * How much longer (ms) the player can hold an aim before it's forced to
    * fire. Drained by game.ts while aiming; reset here, in the same place
-   * dashCharge resets, so both resources share one "touch solid ground"
-   * trigger.
+   * dashCharge resets, so both resources share one "found a foothold" trigger.
    */
   aimMeter: number;
+  /**
+   * Pressed into a wall and falling. The second foothold: it refreshes exactly
+   * what landing refreshes, and game.ts will not let an aim start unless the
+   * body is either grounded or here.
+   */
+  wallSliding: boolean;
+  /** Which side that wall is on (1 = to the right), or 0 when not sliding. */
+  wallDir: 0 | 1 | -1;
 }
 
 export function newBody(x: number, feetY: number): Body {
-  return { x, feetY, vx: 0, vy: 0, facing: 1, grounded: false, dashCharge: true, aimMeter: AIM_METER_MAX_MS };
+  return {
+    x,
+    feetY,
+    vx: 0,
+    vy: 0,
+    facing: 1,
+    grounded: false,
+    dashCharge: true,
+    aimMeter: AIM_METER_MAX_MS,
+    wallSliding: false,
+    wallDir: 0,
+  };
 }
 
 export interface BodyInput {
@@ -80,16 +106,29 @@ export function stepBody(
   // safely-landed lunge out into the next gap. A stationary body has nothing
   // to resolve on this axis; the Y pass below correctly settles it onto the
   // surface instead.
+  // Which side a wall was hit on this frame, if any. Taken from the INPUT
+  // rather than from vx, because vx is zeroed by the first collision below and
+  // a second blocker in the same frame would then read as the opposite side.
+  let wallDir: 0 | 1 | -1 = 0;
+
   if (vx !== 0) {
     x += vx * dtSec;
     let box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
     for (const p of platforms) {
       if (!overlaps(box, p)) continue;
+      wallDir = input.moveX > 0 ? 1 : -1;
       x = vx > 0 ? p.x - PLAYER_W / 2 : p.x + p.w + PLAYER_W / 2;
       vx = 0;
       box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
     }
   }
+
+  // Catching a wall caps the fall. Held here, before the descent is integrated,
+  // so the cap applies on the very frame contact is made rather than one frame
+  // late -- which matters, because that first frame is the one the player is
+  // reacting to. Pressing into the wall is required: let go of the direction
+  // and vx is 0, no collision is found, and the body drops free again.
+  if (wallDir !== 0 && vy > 0) vy = Math.min(vy, WALL_SLIDE_SPEED);
 
   feetY += vy * dtSec;
   grounded = false;
@@ -108,5 +147,25 @@ export function stepBody(
     box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
   }
 
-  return { x, feetY, vx, vy, facing, grounded, dashCharge, aimMeter };
+  // A wall counts as a foothold only while actually hanging on one: airborne,
+  // still descending, and pressed into it. Landing wins -- if the feet found
+  // ground this frame, that is the foothold, not the wall beside it.
+  const wallSliding = !grounded && vy > 0 && wallDir !== 0;
+  if (wallSliding) {
+    dashCharge = true;
+    aimMeter = AIM_METER_MAX_MS;
+  }
+
+  return {
+    x,
+    feetY,
+    vx,
+    vy,
+    facing,
+    grounded,
+    dashCharge,
+    aimMeter,
+    wallSliding,
+    wallDir: wallSliding ? wallDir : 0,
+  };
 }

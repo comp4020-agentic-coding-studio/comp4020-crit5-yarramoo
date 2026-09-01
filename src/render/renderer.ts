@@ -14,12 +14,17 @@ import {
   PATROL_SQUASH_AMOUNT,
   PATROL_WIDTH_RATIO,
   TELEGRAPH_FLASHES,
+  WALL_CLING_LEAN_PX,
+  WALL_CLING_PULSE,
+  WALL_CLING_PULSE_PERIOD_MS,
+  WALL_CLING_SQUEEZE,
+  WALL_CLING_STRETCH,
   WALK_SQUASH,
   WALK_STRIDE_U,
   WALK_WIDTH_RATIO,
 } from "../anim/constants.ts";
 import { hashTurns, wave } from "../anim/ease.ts";
-import { applyPose, IDENTITY, pose, squash, type Pose } from "../anim/pose.ts";
+import { applyPose, compose, IDENTITY, pose, squash, type Pose } from "../anim/pose.ts";
 import type { Rect } from "../core/aabb.ts";
 import type { Vec2 } from "../core/vec.ts";
 import { bodyRect } from "../sim/body.ts";
@@ -108,9 +113,27 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Readonly<Enemy>, r: Rec
 /** How the player is deformed this frame. One pose out, no drawing. */
 function playerPose(game: Readonly<Game>, nowMs: number): Pose {
   const body = game.body;
+  const aiming = game.lunge.kind === "aiming";
+
+  // Clinging to a wall, pressed thin against the face and pulsing slowly to say
+  // the charge is back. This one COMPOSES rather than winning outright, because
+  // aiming from a wall is the entire reason walls exist -- the player needs to
+  // see both "I am attached" and "I am holding a shot" at once. It is exactly
+  // the case the old one-branch-wins chain could not express.
+  if (body.wallSliding) {
+    const cling = compose(
+      pose({
+        scaleX: 1 - WALL_CLING_SQUEEZE,
+        scaleY: 1 + WALL_CLING_STRETCH,
+        dx: body.wallDir * WALL_CLING_LEAN_PX,
+      }),
+      squash(wave(nowMs / WALL_CLING_PULSE_PERIOD_MS) * WALL_CLING_PULSE, 0),
+    );
+    return aiming ? compose(cling, pose({ scaleY: AIM_CROUCH_SCALE })) : cling;
+  }
 
   // A slight crouch reads as "holding, ready to fire" without any new art.
-  if (game.lunge.kind === "aiming") return pose({ scaleY: AIM_CROUCH_SCALE });
+  if (aiming) return pose({ scaleY: AIM_CROUCH_SCALE });
 
   // Mid-dash the body is snapped along the dash segment and stepBody never
   // runs, so `grounded` and `vx` still hold whatever they were before launch
@@ -135,7 +158,9 @@ function drawPlayer(ctx: CanvasRenderingContext2D, game: Readonly<Game>, r: Rect
   const aiming = game.lunge.kind === "aiming";
   const d = applyPose(r, playerPose(game, nowMs));
 
-  ctx.fillStyle = aiming ? COLORS.playerAiming : COLORS.player;
+  // The pale body already means "a shot is available here" while aiming; a wall
+  // grab borrows it rather than inventing a second colour for the same fact.
+  ctx.fillStyle = aiming || game.body.wallSliding ? COLORS.playerAiming : COLORS.player;
   ctx.fillRect(d.x, d.y, d.w, d.h);
 
   if (!aiming) {
