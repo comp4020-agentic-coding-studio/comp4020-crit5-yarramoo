@@ -32,6 +32,26 @@ export interface LungeInput {
 }
 
 /**
+ * A player resting exactly flush on a platform's top has its center sitting
+ * exactly on that platform's Minkowski-expanded boundary (see aabb.ts). The
+ * generic sweep's flush-convention fix only catches a diagonal graze where
+ * both axes' valid windows collapse to a single instant; it does NOT catch
+ * this case, because the y-axis alone is already a real, sustained entry for
+ * any aim with a downward component, however slight. Left alone, that makes
+ * `resolveAimEndpoint` collapse to zero distance for almost any mouse-aimed
+ * near-horizontal shot fired from the ground -- a few pixels of vertical
+ * mouse noise is enough. A player can't be blocked by the ground they're
+ * currently standing on; excluding it from the sweep is what makes aiming
+ * roughly sideways while grounded actually work.
+ */
+function isSupportingPlatform(playerPos: Vec2, platform: Rect): boolean {
+  const bottom = playerPos.y + PLAYER_H / 2;
+  const flush = Math.abs(bottom - platform.y) < 1e-6;
+  const overlapsX = playerPos.x + PLAYER_W / 2 > platform.x && playerPos.x - PLAYER_W / 2 < platform.x + platform.w;
+  return flush && overlapsX;
+}
+
+/**
  * Where a lunge aimed along `rawAimVector` from `playerPos` would land.
  *
  * Below `AIM_DEADZONE`, the aim snaps to the player's last facing direction
@@ -47,7 +67,8 @@ export function resolveAimEndpoint(
   const rawLen = length(rawAimVector);
   const dir = rawLen < AIM_DEADZONE ? { x: facing, y: 0 } : normalize(rawAimVector);
   const target = add(playerPos, scale(dir, LUNGE_DISTANCE));
-  const t = sweepToFirstBlock(playerPos, target, PLAYER_W, PLAYER_H, platforms);
+  const blockers = platforms.filter((p) => !isSupportingPlatform(playerPos, p));
+  const t = sweepToFirstBlock(playerPos, target, PLAYER_W, PLAYER_H, blockers);
   return add(playerPos, scale(sub(target, playerPos), t));
 }
 

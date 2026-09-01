@@ -18,6 +18,11 @@ export interface Level {
   enemies: Enemy[];
   goal: Rect;
   spawn: { x: number; feetY: number };
+  /** World-space region the camera stays within -- hand-picked to frame the
+   * level's playable content, not derived from platform extents (a couple of
+   * platforms, like the tunnel ceiling, reach far beyond what's ever worth
+   * showing on screen). */
+  bounds: Rect;
 }
 
 export function buildLevel(): Level {
@@ -52,11 +57,17 @@ export function buildLevel(): Level {
   // so reaching it after landing is a short, unambiguous walk.
   const goal: Rect = { x: 1750, y: 340, w: 60, h: 40 };
 
+  // Covers every beat's playable area with margin for a jump apex or a
+  // vertical-beat overshoot, but stops well short of the tunnel ceiling's
+  // real extent and of VOID_Y -- there's nothing worth showing up there.
+  const bounds: Rect = { x: -150, y: 250, w: 2070, h: 750 };
+
   return {
     platforms: [floor1, tunnelCeiling, floor2, floor3],
     enemies: [gateEnemy, baitEnemy],
     goal,
     spawn: { x: 60, feetY: GROUND_Y },
+    bounds,
   };
 }
 
