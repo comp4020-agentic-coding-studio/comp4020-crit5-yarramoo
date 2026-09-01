@@ -30,6 +30,31 @@ which deliverable applies. Read both before you plan or build.
   three retroactive commits afterwards, losing the true chronology. Commit as
   each piece lands instead.
 
+## Never `toEqual` a large structure
+
+`expect(a).toEqual(b)` on large arrays/objects walks them element by element
+and can blow past vitest's 5 s default timeout well before it blows past any
+sane amount of real work. That reads as a flake (passes alone, times out under
+full-suite load) rather than as the O(n) comparison it actually is, and it
+"fails" with a diff nobody can read. Prefer a targeted comparison (native
+`Buffer.equals` for byte data, or comparing lengths + a spot-check) and report
+the first differing index yourself. If a test starts failing on timing rather
+than logic, suspect the assertion before the code under test — the commit that
+goes red is not always the commit that introduced the problem, since a slow
+assertion can sit latent until a later, unrelated test makes the suite heavier.
+
+## Slow tests need a real timeout, not luck
+
+A test that legitimately simulates a lot of frames (a full scripted
+playthrough, say) can take long enough that vitest's 5 s default turns it into
+an occasional flake rather than a reliable pass or fail. If a suite has tests
+like this, set `testTimeout` explicitly in `vitest.config.ts` rather than
+hoping the default is enough, and prefer a coarser simulated timestep in tests
+that only care about the outcome, not every frame — the underlying stepper
+should already substep internally, so a coarser test tick doesn't change what's
+being verified. Before trusting a green suite here, run it a few times: one
+green run distinguishes "passing" from nothing at all.
+
 ## Full-bleed canvas gotcha
 
 An absolutely-positioned replaced element (`<canvas>`, `<img>`, `<video>`)
