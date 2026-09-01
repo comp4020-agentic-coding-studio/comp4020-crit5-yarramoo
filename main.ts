@@ -8,7 +8,7 @@ import { createTouchInput } from "./src/input/touch.ts";
 import { shouldUseTouchUI, type InputSource } from "./src/input/types.ts";
 import { computeCamera, render } from "./src/render/renderer.ts";
 import { newGame, stepGame, type Game, type GameInput } from "./src/sim/game.ts";
-import { buildLevel } from "./src/sim/level.ts";
+import { LEVELS } from "./src/sim/level.ts";
 import { PLAYER_H } from "./src/sim/constants.ts";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -22,14 +22,19 @@ function resize(): void {
 window.addEventListener("resize", resize);
 resize();
 
-const level = buildLevel();
-let game: Game = newGame(level);
+let levelIndex = 0;
+let game: Game = newGame(LEVELS[levelIndex]!);
 const input: InputSource = shouldUseTouchUI() ? createTouchInput(canvas) : createDesktopInput(canvas);
 
 restartLink.hidden = true;
 restartLink.addEventListener("click", (e) => {
   e.preventDefault();
-  game = newGame(level);
+  // The restart link is only ever shown on a loss (restart the level just
+  // failed) or a win on the LAST level (loop back to the start) -- a win on
+  // any earlier level auto-advances in the frame loop below and never
+  // reaches a rendered frame with the link visible.
+  if (game.run.outcome === "won") levelIndex = 0;
+  game = newGame(LEVELS[levelIndex]!);
   restartLink.hidden = true;
 });
 
@@ -50,6 +55,13 @@ function frame(now: number): void {
   };
 
   game = stepGame(game, gameInput, dtMs);
+
+  // Advance immediately on a non-final win -- no pause, no restart link.
+  if (game.run.outcome === "won" && levelIndex < LEVELS.length - 1) {
+    levelIndex++;
+    game = newGame(LEVELS[levelIndex]!);
+  }
+
   render(ctx, game, canvas.width, canvas.height);
 
   restartLink.hidden = game.run.outcome === null;
