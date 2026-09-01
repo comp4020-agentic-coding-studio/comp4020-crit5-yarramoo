@@ -4,7 +4,7 @@
 
 import type { Rect } from "../core/aabb.ts";
 import { newEnemy, newHopperEnemy, newLungerEnemy, newVerticalEnemy, type Enemy } from "./enemy.ts";
-import { GRAVITY, MAX_JUMP_DISTANCE, MOVE_SPEED } from "./constants.ts";
+import { GRAVITY, MAX_JUMP_DISTANCE, MOVE_SPEED, PLAYER_W } from "./constants.ts";
 import { newMovingPlatform, type MovingPlatform } from "./platform.ts";
 
 export const GROUND_Y = 600;
@@ -206,8 +206,22 @@ export function fallCarryDistance(dropHeight: number): number {
 export const PINCER_DROP = 160;
 export const PINCER_LEDGE_END = 1050;
 export const PINCER_FLOOR_Y = GROUND_Y + PINCER_DROP;
-export const PINCER_A_X = 902;
-export const PINCER_B_X = 1302;
+/**
+ * Where a walk-off landing can put the player: from the ledge edge plus half a
+ * body (a body stops being supported once its box clears the edge, not once its
+ * centre does -- which is 12u further than the obvious answer, and cost a whole
+ * playtest to notice) out to that plus the fall's horizontal carry.
+ */
+export const PINCER_WINDOW_START = PINCER_LEDGE_END + PLAYER_W / 2;
+export const PINCER_WINDOW_END = PINCER_WINDOW_START + fallCarryDistance(PINCER_DROP);
+
+// Centred on that window rather than on the ledge edge. An earlier pair sat 12u
+// left of here and left the far end of the window outside lungerA's reach: it
+// still played correctly, because a falling player crosses the trigger band ~36u
+// before touchdown while still short of the limit, but it only worked in the
+// air. Centring makes it true on the ground too, which is where it reads.
+export const PINCER_A_X = 914;
+export const PINCER_B_X = 1314;
 
 export function buildLevel5(): Level {
   // Every lunger so far has been fought one at a time, at a distance the player
@@ -233,16 +247,18 @@ export function buildLevel5(): Level {
   // landing window ends around x=780, and it has to end on solid ground.
   const floor5: Rect = { x: 600, y: PINCER_FLOOR_Y, w: 1400, h: 300 };
 
-  // 400u apart, straddling the landing window. Two constraints pin this:
+  // 400u apart, straddling the landing window. Two constraints pin this, and
+  // the second is why they can't simply be moved further apart for comfort:
   //
   //   - Both must trigger wherever in the window the player touches down. The
-  //     window is [1050, 1050 + fallCarryDistance(160) ~= 1155]; each lunger
-  //     covers +/-260u, so their overlap is [1042, 1162]. It fits, with only
-  //     ~8u of slack at each end -- checked by a test, not by eye.
-  //   - 400u apart means their dash endpoints (902+220=1122 and 1302-220=1082)
-  //     land 40u apart, closer than ENEMY_W + PLAYER_W (52u). So a player who
-  //     merely dodges both dashes by jumping comes down into a gap too narrow
-  //     to stand in: the pincer closes. Killing one is not optional.
+  //     window is ~105u wide and their combined 260u ranges overlap over 120u,
+  //     so there is only ~7u of slack at each end. That is inherent, not sloppy:
+  //     the drop has to clear a 137u jump apex to be one-way, and a fall that
+  //     deep carries at least ~97u horizontally. Checked by a test, not by eye.
+  //   - 400u apart means their dash endpoints (914+220 and 1314-220) finish 40u
+  //     apart, closer than ENEMY_W + PLAYER_W (52u). A player who merely dodges
+  //     both dashes by jumping comes down into a gap too narrow to stand in, so
+  //     the pincer closes. Killing one is not optional.
   const lungerA = newLungerEnemy("pincerA", PINCER_A_X, PINCER_FLOOR_Y);
   const lungerB = newLungerEnemy("pincerB", PINCER_B_X, PINCER_FLOOR_Y);
 

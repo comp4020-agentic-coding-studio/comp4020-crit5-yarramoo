@@ -9,12 +9,13 @@ import {
   buildLevel3,
   buildLevel4,
   buildLevel5,
-  fallCarryDistance,
   PINCER_A_X,
   PINCER_B_X,
   PINCER_DROP,
   PINCER_FLOOR_Y,
   PINCER_LEDGE_END,
+  PINCER_WINDOW_END,
+  PINCER_WINDOW_START,
 } from "../src/sim/level.ts";
 import { newGame, stepGame, type Game, type GameInput } from "../src/sim/game.ts";
 import {
@@ -24,6 +25,7 @@ import {
   ENEMY_LUNGE_RANGE_X,
   ENEMY_W,
   JUMP_APEX_HEIGHT,
+  LUNGE_DISTANCE,
   PLAYER_H,
   PLAYER_W,
 } from "../src/sim/constants.ts";
@@ -199,14 +201,24 @@ describe("level 5: two lungers at once, one charge", () => {
   // margins here are single-digit, so "looks about right" is not good enough.
   describe("its geometry holds", () => {
     it("both lungers cover the whole landing window, so the pincer always springs", () => {
-      const windowStart = PINCER_LEDGE_END;
-      const windowEnd = PINCER_LEDGE_END + fallCarryDistance(PINCER_DROP);
-      // Where a player is inside BOTH trigger ranges at once.
+      // Where a player is inside BOTH trigger ranges at once. The window must
+      // sit entirely inside it: a landing that only trips one of the pair is
+      // level 4 again, not a pincer.
       const coveredFrom = PINCER_B_X - ENEMY_LUNGE_RANGE_X;
       const coveredTo = PINCER_A_X + ENEMY_LUNGE_RANGE_X;
 
-      expect(windowStart).toBeGreaterThanOrEqual(coveredFrom);
-      expect(windowEnd).toBeLessThanOrEqual(coveredTo);
+      expect(PINCER_WINDOW_START).toBeGreaterThanOrEqual(coveredFrom);
+      expect(PINCER_WINDOW_END).toBeLessThanOrEqual(coveredTo);
+    });
+
+    it("counts the player's own width in that window", () => {
+      // A body stops being supported when its BOX clears the ledge, not its
+      // centre, so it leaves 12u further right than the edge itself. Missing
+      // that put the far end of the window outside lungerA's reach, and the
+      // level still played -- the trigger fires mid-fall, before the limit --
+      // which is exactly the kind of "works for the wrong reason" a live
+      // playtest catches and arithmetic on the wrong number does not.
+      expect(PINCER_WINDOW_START - PINCER_LEDGE_END).toBe(PLAYER_W / 2);
     });
 
     it("the drop is past a jump apex, so arriving in the chamber is a commitment", () => {
@@ -242,13 +254,25 @@ describe("level 5: two lungers at once, one charge", () => {
     g = settleAfterDash(g);
     expect(byId(g, "pincerA").alive).toBe(false);
 
-    // B fires into the space the player has already left.
+    // Out of B's reach now -- so B's telegraph resolves into a lunge at where
+    // the player WAS, and lands short.
+    expect(Math.abs(byId(g, "pincerB").x - g.body.x)).toBeGreaterThan(ENEMY_LUNGE_RANGE_X);
+    const reachBefore = Math.abs(PINCER_B_X - g.body.x);
+    expect(reachBefore).toBeGreaterThan(LUNGE_DISTANCE); // couldn't have shot back even if charged
+
     g = runUntil(g, (s) => byId(s, "pincerB").lungeState === "dashing", () => walk(0));
     g = runUntil(g, (s) => byId(s, "pincerB").lungeState === "patrol", () => walk(0));
     expect(g.run.outcome).toBe(null);
     expect(byId(g, "pincerB").alive).toBe(true);
-    // ...and a lunger's dash permanently repositions it: it stays where it landed.
+    // A lunger's dash permanently repositions it -- it stays where it landed.
     expect(byId(g, "pincerB").x).toBeLessThan(PINCER_B_X);
+
+    // ...which is the actual point of the beat: by missing, B has closed the
+    // gap itself. It was out of the player's reach before its lunge and is
+    // inside it afterwards. The enemy hands the player the shot.
+    const reachAfter = Math.abs(byId(g, "pincerB").x - g.body.x);
+    expect(reachAfter).toBeLessThan(LUNGE_DISTANCE);
+    expect(reachAfter).toBeLessThan(reachBefore);
 
     // Landing refilled the charge, and the survivor is back within reach.
     g = fireLunge(g, aimAt(g, "pincerB"));
