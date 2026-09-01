@@ -40,6 +40,25 @@ function tsFiles(dir: string): string[] {
 
 const files = PURE_DIRS.flatMap(tsFiles);
 
+/**
+ * Source with comments stripped, so the patterns below are about code and not
+ * about prose.
+ *
+ * This is not tidiness. The DOM check claimed a comment mentioning "the
+ * document" was fine, and it wasn't: `\bwindow\s*\.` matches the word "window"
+ * ending a sentence, which is how a level comment describing a landing *window*
+ * turned src/sim/level.ts into a DOM violation. A sensor that fires on English
+ * gets satisfied by rewording, and a sensor people learn to reword around has
+ * stopped being a sensor.
+ *
+ * The `[^:]` guard keeps a `https://` inside a string from eating the rest of
+ * its line. A DOM access hidden in a string literal is still caught; one in a
+ * comment is meant to be allowed.
+ */
+function code(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 describe("the game rules are renderer-agnostic", () => {
   it("found the pure modules", () => {
     expect(files.length).toBeGreaterThan(5);
@@ -56,8 +75,7 @@ describe("the game rules are renderer-agnostic", () => {
     });
 
     it(`${file} does not touch the DOM`, () => {
-      const src = readFileSync(file, "utf8");
-      // Word-boundary matches so a comment mentioning "the document" is fine.
+      const src = code(readFileSync(file, "utf8"));
       expect(
         /\b(document|window|navigator|localStorage)\s*\./.test(src),
         `${file} reaches for the DOM, which makes it untestable in node.`,
@@ -69,8 +87,7 @@ describe("the game rules are renderer-agnostic", () => {
 describe("the game rules are deterministic", () => {
   for (const file of files) {
     it(`${file} reads no wall clock and no randomness`, () => {
-      const src = readFileSync(file, "utf8");
-      // Call-shape, not a bare mention, so prose about "Date.now" is still fine.
+      const src = code(readFileSync(file, "utf8"));
       expect(
         /\b(Date\.now|performance\.now|Math\.random)\s*\(/.test(src),
         `${file} reads a wall clock or randomness. Same inputs must give the same ` +
