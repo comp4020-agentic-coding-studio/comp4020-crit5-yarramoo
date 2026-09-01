@@ -63,6 +63,30 @@ export function sweepToFirstBlock(
 }
 
 /**
+ * Does a box of size (boxW, boxH), traveling from `from` to `to`, touch
+ * `rect` at any point along the way? Unlike `sweepToFirstBlock`, this doesn't
+ * stop the sweep -- it's for things a moving box passes through without being
+ * blocked by (an enemy the lunge kills mid-flight), not things that block it.
+ */
+export function sweepTouches(
+  from: Readonly<{ x: number; y: number }>,
+  to: Readonly<{ x: number; y: number }>,
+  boxW: number,
+  boxH: number,
+  rect: Rect,
+): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const expanded: Rect = {
+    x: rect.x - boxW / 2,
+    y: rect.y - boxH / 2,
+    w: rect.w + boxW,
+    h: rect.h + boxH,
+  };
+  return segmentEntryTime(from.x, from.y, dx, dy, expanded) !== null;
+}
+
+/**
  * Slab-method ray/rect intersection, restricted to t in [0, 1]. Returns the
  * entry fraction, or null if the segment never enters the rect's interior.
  */
