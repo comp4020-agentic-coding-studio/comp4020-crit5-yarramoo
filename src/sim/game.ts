@@ -50,9 +50,17 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
   const dtSec = dtMs / 1000;
   const playerCenter: Vec2 = { x: game.body.x, y: centerYOf(game.body.feetY) };
 
+  // The aim meter: drains only while actually aiming, resets only on
+  // landing (see body.ts's stepBody). Running it out mid-aim is treated as
+  // if the player had let go this instant -- reusing stepLunge's existing
+  // release branch verbatim, rather than a separate cancel/timeout path.
+  const aimMeterAfterDrain =
+    game.lunge.kind === "aiming" ? Math.max(0, game.body.aimMeter - dtMs) : game.body.aimMeter;
+  const meterExpired = game.lunge.kind === "aiming" && aimMeterAfterDrain <= 0;
+
   const lungeResult = stepLunge(
     game.lunge,
-    input.lunge,
+    meterExpired ? { ...input.lunge, held: false } : input.lunge,
     playerCenter,
     game.body.facing,
     game.body.dashCharge,
@@ -60,12 +68,13 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
     dtMs,
   );
 
-  let body = game.body;
+  let body = aimMeterAfterDrain === game.body.aimMeter ? game.body : { ...game.body, aimMeter: aimMeterAfterDrain };
   let enemies = game.enemies;
 
   if (lungeResult.state.kind === "aiming") {
     // Time is frozen: gravity off, velocity held, patrol frozen. Nothing
-    // below moves this frame.
+    // below moves this frame (the meter, drained above, is the one
+    // exception -- it's the cost of maintaining the freeze).
   } else {
     enemies = enemies.map((e) => stepEnemy(e, dtSec));
     if (lungeResult.state.kind === "dashing") {

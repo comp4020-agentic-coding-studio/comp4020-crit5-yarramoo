@@ -5,7 +5,7 @@
 
 import type { Rect } from "../core/aabb.ts";
 import { overlaps, rectAt } from "../core/aabb.ts";
-import { GRAVITY, JUMP_SPEED, MOVE_SPEED, PLAYER_H, PLAYER_W } from "./constants.ts";
+import { AIM_METER_MAX_MS, GRAVITY, JUMP_SPEED, MOVE_SPEED, PLAYER_H, PLAYER_W } from "./constants.ts";
 
 export interface Body {
   x: number; // center x
@@ -16,10 +16,17 @@ export interface Body {
   grounded: boolean;
   /** One lunge charge, refreshed only by touching solid ground. */
   dashCharge: boolean;
+  /**
+   * How much longer (ms) the player can hold an aim before it's forced to
+   * fire. Drained by game.ts while aiming; reset here, in the same place
+   * dashCharge resets, so both resources share one "touch solid ground"
+   * trigger.
+   */
+  aimMeter: number;
 }
 
 export function newBody(x: number, feetY: number): Body {
-  return { x, feetY, vx: 0, vy: 0, facing: 1, grounded: false, dashCharge: true };
+  return { x, feetY, vx: 0, vy: 0, facing: 1, grounded: false, dashCharge: true, aimMeter: AIM_METER_MAX_MS };
 }
 
 export interface BodyInput {
@@ -40,7 +47,7 @@ export function stepBody(
   input: BodyInput,
   dtSec: number,
 ): Body {
-  let { x, feetY, vy, grounded, dashCharge } = body;
+  let { x, feetY, vy, grounded, dashCharge, aimMeter } = body;
   let facing = body.facing;
   let vx: number;
 
@@ -93,6 +100,7 @@ export function stepBody(
       feetY = p.y; // land on top
       grounded = true;
       dashCharge = true;
+      aimMeter = AIM_METER_MAX_MS;
     } else if (vy < 0) {
       feetY = p.y + p.h + PLAYER_H; // bump the underside
     }
@@ -100,5 +108,5 @@ export function stepBody(
     box = rectAt(x, feetY, PLAYER_W, PLAYER_H);
   }
 
-  return { x, feetY, vx, vy, facing, grounded, dashCharge };
+  return { x, feetY, vx, vy, facing, grounded, dashCharge, aimMeter };
 }

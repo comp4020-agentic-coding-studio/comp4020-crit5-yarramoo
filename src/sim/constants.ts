@@ -21,6 +21,25 @@ export const LUNGE_SPEED = LUNGE_DISTANCE / (LUNGE_DURATION_MS / 1000); // u/s, 
 
 export const AIM_DEADZONE = 8; // u; below this, snap to last facing rather than divide-by-zero
 
+// The aim-freeze resource: drains while aiming, resets only on landing.
+// Existing scripted holds run ~16-300ms, so this stays generous enough that
+// ordinary play never brushes it -- it only matters in levels built to test
+// it, where lingering on the "perfect" shot has a real cost.
+export const AIM_METER_MAX_MS = 2500;
+
+// A vertical hop's height and full up-down cycle time.
+export const HOPPER_HEIGHT = 90; // u
+export const HOPPER_PERIOD_MS = 900;
+
+// An enemy that lunges back: same telegraph-then-dash shape as the player's
+// own mechanic, tuned shorter/slower so it reads as fair to react to.
+export const ENEMY_LUNGE_RANGE_X = 260; // u; horizontal trigger range
+export const ENEMY_LUNGE_LEVEL_TOLERANCE = 40; // u; how level with the player counts as "in line"
+export const ENEMY_LUNGE_TELEGRAPH_MS = 450;
+export const ENEMY_LUNGE_DISTANCE = 220; // u
+export const ENEMY_LUNGE_DURATION_MS = 220;
+export const ENEMY_LUNGE_SPEED = ENEMY_LUNGE_DISTANCE / (ENEMY_LUNGE_DURATION_MS / 1000);
+
 // Time to reach the top of a jump, and how high that is.
 export const TIME_TO_APEX_S = JUMP_SPEED / GRAVITY; // ~0.443s
 export const JUMP_APEX_HEIGHT = (JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY); // ~137u

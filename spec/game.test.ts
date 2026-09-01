@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { isOver } from "../src/sim/run.ts";
 import { buildLevel } from "../src/sim/level.ts";
 import { newGame, stepGame, type Game, type GameInput } from "../src/sim/game.ts";
+import { AIM_METER_MAX_MS } from "../src/sim/constants.ts";
 
 const DT_MS = 16;
 const MAX_FRAMES = 2000; // ~32s of simulated time -- generous, still a hard bound
@@ -133,5 +134,47 @@ describe("full playthroughs", () => {
 
     g = stepGame(g, walk(1), DT_MS);
     expect(g.run).toEqual(ended);
+  });
+});
+
+describe("aim meter", () => {
+  const AIM_RIGHT = (held: boolean) => ({ move: { moveX: 0, jump: false }, lunge: { held, aimVector: { x: 1, y: 0 } } });
+
+  it("starts full and drains only while aiming", () => {
+    let g: Game = newGame(buildLevel());
+    expect(g.body.aimMeter).toBe(AIM_METER_MAX_MS);
+
+    // The press-frame transitions idle -> aiming but doesn't drain yet (same
+    // convention as the lunge's own elapsedMs, which starts at 0 on entry);
+    // draining begins on the first frame spent continuously aiming.
+    g = stepGame(g, AIM_RIGHT(true), DT_MS);
+    expect(g.lunge.kind).toBe("aiming");
+    expect(g.body.aimMeter).toBe(AIM_METER_MAX_MS);
+
+    g = stepGame(g, AIM_RIGHT(true), DT_MS);
+    expect(g.lunge.kind).toBe("aiming");
+    expect(g.body.aimMeter).toBeCloseTo(AIM_METER_MAX_MS - DT_MS);
+  });
+
+  it("forces a real dash once the meter runs out, even while still held", () => {
+    let g: Game = newGame(buildLevel());
+    g = stepGame(g, AIM_RIGHT(true), DT_MS);
+    expect(g.lunge.kind).toBe("aiming");
+
+    const framesToExhaust = Math.ceil(AIM_METER_MAX_MS / DT_MS) + 2;
+    for (let i = 0; i < framesToExhaust && g.lunge.kind === "aiming"; i++) {
+      g = stepGame(g, AIM_RIGHT(true), DT_MS);
+    }
+    expect(g.lunge.kind).toBe("dashing");
+    expect(g.body.aimMeter).toBe(0);
+  });
+
+  it("resets to full once grounded again after a dash", () => {
+    let g: Game = newGame(buildLevel());
+    g = fireLunge(g, { x: 500, y: 0 });
+    g = waitForDashToEnd(g);
+    g = runFrames(g, walk(0), 5);
+    expect(g.body.grounded).toBe(true);
+    expect(g.body.aimMeter).toBe(AIM_METER_MAX_MS);
   });
 });
