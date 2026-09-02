@@ -415,6 +415,63 @@ export function buildLevel8(): Level {
   };
 }
 
+/** Level 9's piston: a wall that is only somewhere for part of its cycle. */
+export const PISTON_X = 700;
+export const PISTON_TOP_MIN = 300;
+export const PISTON_TOP_MAX = 700;
+export const PISTON_H = 500;
+export const LEDGE9_Y = 400;
+export const LANDING9_X = 550;
+export const LANDING9_W = 150; // ends flush at PISTON_X -- never overlaps the piston's own footprint
+export const LANDING9_Y = 900;
+
+export function buildLevel9(): Level {
+  // Two things the wall slide has not been asked for yet: catching a wall that
+  // is not where you left it, and riding one DOWN on purpose.
+  //
+  // The piston is an ordinary moving platform, which means it is solid on every
+  // side -- the same fact that lets level 6's shutter be grabbed by a player who
+  // blew the crossing. Here that is the whole first beat rather than an
+  // accident. A lunge fired at it lands only while it is high enough to be in
+  // the way; fired half a cycle later the same shot sails through the space it
+  // used to occupy and out over the void. The target has a timetable.
+  const ledge9: Rect = { x: -100, y: LEDGE9_Y, w: 600, h: 300 }; // spans -100..500
+  const piston = newMovingPlatform(
+    "piston9",
+    "y",
+    PISTON_X,
+    PISTON_TOP_MIN,
+    80,
+    PISTON_H,
+    PISTON_TOP_MIN,
+    PISTON_TOP_MAX,
+    90,
+  );
+
+  // landing9 sits directly beneath the face the player clings to, not across a
+  // further gap -- a second lunge fired *into* the wall you are already flush
+  // against is blocked at ~0 distance by that same wall (the ground-only
+  // "isSupportingPlatform" exemption in lunge.ts has no analogue for a wall),
+  // so the descent has to be able to finish on its own. Riding the slide down
+  // is what lands it: a capped WALL_SLIDE_SPEED fall from the catch reaches
+  // LANDING9_Y well before the piston's own cycle reverses and pulls the face
+  // out from under the player (see the level 9 describe block in
+  // spec/levels.test.ts for the arithmetic).
+  const landing9: Rect = { x: LANDING9_X, y: LANDING9_Y, w: LANDING9_W, h: 300 };
+
+  const goal: Rect = { x: LANDING9_X + 40, y: LANDING9_Y - 40, w: 60, h: 40 };
+  const bounds: Rect = { x: -150, y: 250, w: 1900, h: 1200 };
+
+  return {
+    platforms: [ledge9, landing9],
+    movingPlatforms: [piston],
+    enemies: [],
+    goal,
+    spawn: { x: 60, feetY: LEDGE9_Y },
+    bounds,
+  };
+}
+
 export const LEVELS: Level[] = [
   buildLevel(),
   buildLevel2(),
@@ -424,4 +481,5 @@ export const LEVELS: Level[] = [
   buildLevel6(),
   buildLevel7(),
   buildLevel8(),
+  buildLevel9(),
 ];

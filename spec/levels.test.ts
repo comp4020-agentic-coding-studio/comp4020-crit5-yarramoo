@@ -12,12 +12,19 @@ import {
   buildLevel6,
   buildLevel7,
   buildLevel8,
+  buildLevel9,
   CHIMNEY_FAR_X,
   CHIMNEY_FLOOR_Y,
   CHIMNEY_LEFT_FACE,
   CHIMNEY_RIGHT_FACE,
   CHIMNEY_TOP_Y,
   GROUND_Y,
+  LANDING9_W,
+  LANDING9_X,
+  LANDING9_Y,
+  LEDGE9_Y,
+  PISTON_TOP_MAX,
+  PISTON_X,
   PILLAR_TOP,
   PILLAR_W,
   PILLAR_X,
@@ -43,6 +50,7 @@ import {
   MAX_JUMP_DISTANCE,
   PLAYER_H,
   PLAYER_W,
+  WALL_SLIDE_SPEED,
 } from "../src/sim/constants.ts";
 
 const DT_MS = 16;
@@ -526,5 +534,62 @@ describe("level 8: the chimney -- a climb made of wall grabs", () => {
     g = runUntil(g, (s) => isOver(s.run), () => walk(1));
     expect(g.run.outcome).toBe("won");
     expect(g.body.feetY).toBeLessThanOrEqual(CHIMNEY_TOP_Y);
+  });
+});
+
+describe("level 9: the piston -- lunge to catch a moving wall, then ride it down", () => {
+  const PISTON_SPEED = 90; // matches the newMovingPlatform(...) call in level.ts
+
+  it("the ledge-to-piston gap is too wide to jump, forcing the lunge", () => {
+    expect(PISTON_X - 500).toBeGreaterThan(MAX_JUMP_DISTANCE);
+  });
+
+  it("landing9 sits flush under the cling column and never overlaps the piston's own footprint", () => {
+    expect(LANDING9_X + LANDING9_W).toBeLessThanOrEqual(PISTON_X);
+  });
+
+  it("even the latest possible catch rides down to the landing before the piston reverses", () => {
+    // A purely horizontal shot at ledge height only stops on the piston's face
+    // while the piston's top is at or above that height -- any later and the
+    // shot sails through the open air above it instead. So the worst case is a
+    // catch made at the very last instant that window is open.
+    const latestCatchY = LEDGE9_Y - PLAYER_H / 2;
+    const msToReverse = ((PISTON_TOP_MAX - latestCatchY) / PISTON_SPEED) * 1000;
+    const msToLand = ((LANDING9_Y - LEDGE9_Y) / WALL_SLIDE_SPEED) * 1000;
+    expect(msToLand).toBeLessThan(msToReverse);
+  });
+
+  it("an expert script lunges onto the descending piston and rides it down to the goal", () => {
+    let g: Game = newGame(buildLevel9());
+    g = runUntil(g, (s) => s.body.x >= 480, () => walk(1)); // approach the ledge's edge
+    g = runUntil(g, (s) => s.movingPlatforms[0]!.y <= 340, () => walk(0)); // wait for the piston's window
+
+    g = fireLunge(g, { x: PISTON_X - g.body.x, y: 0 });
+    g = waitForDashToEnd(g);
+    expect(g.body.x).toBeLessThan(PISTON_X); // stopped dead on the face, not through it
+
+    g = runUntil(g, (s) => s.body.wallSliding || isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe(null);
+    expect(g.body.wallDir).toBe(1);
+    expect(g.body.dashCharge).toBe(true); // the wall gave it back
+
+    // Hold on and ride it all the way down -- the descent lands on its own,
+    // with no second lunge needed (and none possible: firing into the wall a
+    // body is already flush against is blocked at ~0 distance by that wall).
+    g = runUntil(g, (s) => s.body.grounded || isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe(null);
+    expect(g.body.grounded).toBe(true);
+    expect(g.body.feetY).toBe(LANDING9_Y);
+
+    g = runUntil(g, (s) => isOver(s.run), () => walk(-1)); // a short walk to the goal
+    expect(g.run.outcome).toBe("won");
+  });
+
+  it("jumping for the piston instead of lunging is fatal -- the gap is too wide", () => {
+    let g: Game = newGame(buildLevel9());
+    g = runUntil(g, (s) => s.body.x >= 480, () => walk(1));
+    g = stepGame(g, { move: { moveX: 1, jump: true }, lunge: NO_LUNGE }, DT_MS);
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe("lost");
   });
 });
