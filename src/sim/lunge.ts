@@ -18,7 +18,16 @@ import { AIM_DEADZONE, LUNGE_DISTANCE, LUNGE_DURATION_MS, PLAYER_H, PLAYER_W } f
 export type LungeState =
   | { kind: "idle" }
   | { kind: "aiming"; aimVector: Vec2 }
-  | { kind: "dashing"; from: Vec2; to: Vec2; elapsedMs: number };
+  | { kind: "dashing"; from: Vec2; to: Vec2; elapsedMs: number }
+  /**
+   * The aim was cancelled and the button is STILL DOWN. Without this, a cancel
+   * is invisible: it returns to idle, and idle sees a held button on the very
+   * next frame and starts a fresh aim, so the world unfreezes and refreezes
+   * within 16ms and nothing appears to have happened. Waiting for the release
+   * is what makes cancelling mean "I am done with this shot" rather than "skip
+   * one frame".
+   */
+  | { kind: "cancelled" };
 
 export function idleLunge(): LungeState {
   return { kind: "idle" };
@@ -111,7 +120,7 @@ export function stepLunge(
     // Cancel outranks release: if both arrive on the same frame, nothing fires.
     // The charge is NOT spent -- backing out of a shot you never took should
     // cost you the time it took to decide, and nothing else.
-    if (input.cancel) return { state: { kind: "idle" }, fired: null };
+    if (input.cancel) return { state: { kind: "cancelled" }, fired: null };
 
     if (!input.held) {
       const to = resolveAimEndpoint(playerPos, input.aimVector, facing, platforms);
@@ -119,6 +128,11 @@ export function stepLunge(
       return { state: { kind: "dashing", from, to, elapsedMs: 0 }, fired: { from, to } };
     }
     return { state: { kind: "aiming", aimVector: input.aimVector }, fired: null };
+  }
+
+  if (state.kind === "cancelled") {
+    // Nothing happens until the button is let go, however long that takes.
+    return { state: input.held ? state : { kind: "idle" }, fired: null };
   }
 
   // dashing: time-boxed, fixed-speed motion that overrides ordinary physics

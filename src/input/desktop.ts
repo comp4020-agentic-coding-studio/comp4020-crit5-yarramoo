@@ -12,8 +12,18 @@ export function createDesktopInput(canvas: HTMLCanvasElement): InputSource {
   const keysDown = new Set<string>();
   let pointer = { x: canvas.width / 2, y: canvas.height / 2 };
   let held = false;
+  let cancelLatched = false;
 
-  const onKeyDown = (e: KeyboardEvent) => keysDown.add(e.key === " " ? "Space" : e.key);
+  // Cancel is LATCHED on the keydown rather than polled like movement, because
+  // it is a press and not a state. read() runs once a frame; a tap shorter than
+  // a frame goes down and up between two reads and is never seen at all. That
+  // is not hypothetical -- it is how this was found, with a scripted Escape
+  // that the game ignored completely while a human's slower one worked.
+  const onKeyDown = (e: KeyboardEvent) => {
+    const key = e.key === " " ? "Space" : e.key;
+    keysDown.add(key);
+    if (CANCEL_KEYS.has(key)) cancelLatched = true;
+  };
   const onKeyUp = (e: KeyboardEvent) => keysDown.delete(e.key === " " ? "Space" : e.key);
   const onMouseMove = (e: MouseEvent) => {
     const rect = canvas.getBoundingClientRect();
@@ -49,7 +59,10 @@ export function createDesktopInput(canvas: HTMLCanvasElement): InputSource {
       const left = anyDown(LEFT_KEYS);
       const right = anyDown(RIGHT_KEYS);
       const moveX = left === right ? 0 : left ? -1 : 1;
-      return { moveX, jump: anyDown(JUMP_KEYS), held, cancel: anyDown(CANCEL_KEYS), pointer };
+      // Consumed on read, so one tap cancels exactly one aim.
+      const cancel = cancelLatched;
+      cancelLatched = false;
+      return { moveX, jump: anyDown(JUMP_KEYS), held, cancel, pointer };
     },
     detach() {
       window.removeEventListener("keydown", onKeyDown);

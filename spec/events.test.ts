@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { newEnemy } from "../src/sim/enemy.ts";
 import { newGame, stepGame, type Game, type GameEvent, type GameInput } from "../src/sim/game.ts";
 import { buildLevel, type Level } from "../src/sim/level.ts";
-import { LUNGE_DISTANCE, PLAYER_H } from "../src/sim/constants.ts";
+import { AIM_METER_MAX_MS, LUNGE_DISTANCE, PLAYER_H } from "../src/sim/constants.ts";
 
 const DT = 16;
 const kinds = (g: Game): GameEvent["kind"][] => g.events.map((e) => e.kind);
@@ -59,7 +59,8 @@ describe("cancelling an aim", () => {
     expect(g.lunge.kind).toBe("aiming");
 
     g = stepGame(g, escape, DT);
-    expect(g.lunge.kind).toBe("idle");
+    // Not idle: idle would see the still-held button next frame and re-arm.
+    expect(g.lunge.kind).toBe("cancelled");
     expect(has(g, "aimCancelled")).toBe(true);
     expect(has(g, "dashFired")).toBe(false);
   });
@@ -69,7 +70,8 @@ describe("cancelling an aim", () => {
     g = stepGame(g, escape, DT);
     expect(g.body.dashCharge).toBe(true);
 
-    // ...so the very next press can still aim.
+    // ...so a fresh press, after letting go, can still aim.
+    g = stepGame(g, idle, DT);
     g = stepGame(g, hold, DT);
     expect(g.lunge.kind).toBe("aiming");
   });
@@ -77,8 +79,10 @@ describe("cancelling an aim", () => {
   it("outranks release when both land on the same frame", () => {
     let g = stepGame(newGame(buildLevel()), hold, DT);
     g = stepGame(g, { ...escape, lunge: { held: false, cancel: true, aimVector: { x: 1, y: 0 } } }, DT);
-    expect(g.lunge.kind).toBe("idle");
     expect(has(g, "dashFired")).toBe(false);
+    // The button was already up, so the next frame settles straight to idle.
+    g = stepGame(g, idle, DT);
+    expect(g.lunge.kind).toBe("idle");
   });
 });
 
@@ -142,5 +146,45 @@ describe("an ending is announced once", () => {
     g = stepGame(g, idle, DT);
     expect(has(g, "won")).toBe(true);
     expect(g.run.outcome).toBe("won");
+  });
+});
+
+describe("a cancel consumes the hold", () => {
+  it("does not re-arm while the button is still down", () => {
+    let g = stepGame(newGame(buildLevel()), hold, DT);
+    expect(g.lunge.kind).toBe("aiming");
+
+    g = stepGame(g, escape, DT);
+    expect(g.lunge.kind).toBe("cancelled");
+
+    // Keep holding. Without the cancelled state this is where a fresh aim
+    // silently began, so the whole affordance looked broken on screen.
+    for (let i = 0; i < 30; i++) g = stepGame(g, hold, DT);
+    expect(g.lunge.kind).toBe("cancelled");
+    expect(g.body.aimMeter).toBe(AIM_METER_MAX_MS); // and time is running again
+  });
+
+  it("re-arms once the button is released and pressed again", () => {
+    let g = stepGame(newGame(buildLevel()), hold, DT);
+    g = stepGame(g, escape, DT);
+    g = stepGame(g, idle, DT); // let go
+    expect(g.lunge.kind).toBe("idle");
+
+    g = stepGame(g, hold, DT);
+    expect(g.lunge.kind).toBe("aiming");
+  });
+
+  it("lets time run again immediately, rather than staying frozen", () => {
+    // The meter is the readable proof: it drains only while time is frozen, and
+    // refills on a foothold. Holding through a cancel should look like standing
+    // still, not like aiming.
+    let held = stepGame(newGame(buildLevel()), hold, DT);
+    for (let i = 0; i < 20; i++) held = stepGame(held, hold, DT);
+    expect(held.body.aimMeter).toBeLessThan(AIM_METER_MAX_MS);
+
+    let cancelled = stepGame(newGame(buildLevel()), hold, DT);
+    cancelled = stepGame(cancelled, escape, DT);
+    for (let i = 0; i < 20; i++) cancelled = stepGame(cancelled, hold, DT);
+    expect(cancelled.body.aimMeter).toBe(AIM_METER_MAX_MS);
   });
 });

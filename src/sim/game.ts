@@ -184,7 +184,7 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
 
   const events: GameEvent[] = [];
   if (game.lunge.kind !== "aiming" && lungeResult.state.kind === "aiming") events.push({ kind: "aimStarted" });
-  if (game.lunge.kind === "aiming" && lungeResult.state.kind === "idle") events.push({ kind: "aimCancelled" });
+  if (game.lunge.kind === "aiming" && lungeResult.state.kind === "cancelled") events.push({ kind: "aimCancelled" });
   if (meterExpired) events.push({ kind: "meterExpired" });
 
   if (lungeResult.fired) {
