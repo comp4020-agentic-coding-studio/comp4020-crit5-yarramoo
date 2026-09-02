@@ -406,3 +406,56 @@ describe("level 7: the chimney -- a crossing wider than a lunge", () => {
     expect(g.run.outcome).toBe("lost");
   });
 });
+
+describe("level 6 and the wall slide meet by accident", () => {
+  // Not designed, and better than what was: the thing that blocks the shot is
+  // itself a face, and a face is now something a falling body can catch. So the
+  // shutter that just ruined the crossing is also what saves it -- a blown shot
+  // is survivable for a player quick enough to grab the very wall that stopped
+  // them. That makes level 6 teach the wall at the exact moment the wall is the
+  // only thing that helps, one level before level 7 demands it.
+  //
+  // The plain failure is still a failure: the fatal test above holds no
+  // direction, catches nothing, and dies. Recovery is a thing you do, not a
+  // thing the level does for you.
+  const shutterTop = (g: Game) => g.movingPlatforms[0]!.y;
+  const laneOpen = (g: Game) => shutterTop(g) + SHUTTER_H < GROUND_Y - PLAYER_H;
+
+  it("a blown shot is survivable if the player catches the pit's far wall", () => {
+    let g: Game = newGame(buildLevel6());
+    g = runUntil(g, (s) => s.body.x >= 585, () => walk(1));
+    g = runUntil(g, (s) => !laneOpen(s), () => walk(0));
+
+    g = fireLunge(g, { x: LUNGE_DISTANCE, y: 0 });
+    g = waitForDashToEnd(g);
+    expect(g.body.x).toBeLessThan(SHUTTER_X); // blocked, and over the pit
+
+    // Scramble: hold into the far wall on the way down.
+    g = runUntil(g, (s) => s.body.wallSliding || isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe(null);
+    expect(g.body.wallSliding).toBe(true);
+    expect(g.body.dashCharge).toBe(true); // the wall handed the shot back
+
+    // Straight up off the face, drifting right -- which lands on top of the
+    // shutter, because a moving platform is solid from every side.
+    g = fireLunge(g, { x: 0, y: -LUNGE_DISTANCE });
+    g = waitForDashToEnd(g);
+    g = runUntil(g, (s) => s.body.grounded || isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe(null);
+    expect(g.body.grounded).toBe(true);
+    expect(g.body.feetY).toBeLessThan(GROUND_Y); // up on the shutter, not back on the floor
+
+    // And from up there the far side is an ordinary lunge away. settleAfterDash
+    // first: this shot is fired from a foothold, so the post-dash `grounded`
+    // is stale-TRUE and the wait below would return at once, in mid-air.
+    g = fireLunge(g, { x: LUNGE_DISTANCE, y: 0 });
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    g = runUntil(g, (s) => s.body.grounded || isOver(s.run), () => walk(1));
+    expect(g.body.feetY).toBe(GROUND_Y);
+    expect(g.body.x).toBeGreaterThan(820); // on floor6b, across the pit
+
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe("won");
+  });
+});
