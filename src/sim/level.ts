@@ -275,10 +275,105 @@ export function buildLevel5(): Level {
   };
 }
 
+/** Level 6's shutter: the y-range its top edge sweeps, and where it stops blocking. */
+export const SHUTTER_TOP_MIN = 200;
+export const SHUTTER_TOP_MAX = 320;
+export const SHUTTER_H = 300;
+export const SHUTTER_X = 700;
+
+export function buildLevel6(): Level {
+  // Every snipe so far has rewarded patience: press, and the world holds still
+  // for as long as the meter lasts while the shot is lined up. That teaches
+  // something slightly false. The freeze does not let a player WAIT for a
+  // moment -- it preserves whatever moment they pressed in. Nothing has ever
+  // charged them for that, because every target so far was always available.
+  //
+  // Here the only route is through a gap that opens and closes on a timer, and
+  // the world stops the instant the button goes down. Press late and the aim
+  // line -- drawn with resolveAimEndpoint, the same sweep the real dash uses --
+  // shows the shot ending in mid-air over the pit before it is fired. The
+  // meter then fires it anyway. There is no cancel: pressing IS committing.
+  const floor6a: Rect = { x: -100, y: GROUND_Y, w: 700, h: 300 }; // spans -100..600
+  const floor6b: Rect = { x: 820, y: GROUND_Y, w: 900, h: 300 }; // 220u pit at 600..820
+
+  // A guillotine, not a door: its bottom edge sweeps from 500 (well clear of a
+  // standing player's 564..600 flight band) to 620 (through it entirely), so
+  // the lane is open a little over half the time. Slow enough to read from the
+  // far side of the pit, quick enough that reading it is not the whole job.
+  const shutter = newMovingPlatform(
+    "shutter6",
+    "y",
+    SHUTTER_X,
+    SHUTTER_TOP_MIN,
+    60,
+    SHUTTER_H,
+    SHUTTER_TOP_MIN,
+    SHUTTER_TOP_MAX,
+    110,
+  );
+
+  const goal: Rect = { x: 1600, y: GROUND_Y - 40, w: 60, h: 40 };
+  const bounds: Rect = { x: -150, y: 150, w: 2000, h: 850 };
+
+  return {
+    platforms: [floor6a, floor6b],
+    movingPlatforms: [shutter],
+    enemies: [],
+    goal,
+    spawn: { x: 60, feetY: GROUND_Y },
+    bounds,
+  };
+}
+
+/** Level 7's pillar: the one foothold in a crossing far too wide for a single lunge. */
+export const PILLAR_X = 900;
+export const PILLAR_W = 80;
+export const PILLAR_TOP = 460;
+export const CHIMNEY_FAR_X = 1200;
+
+export function buildLevel7(): Level {
+  // The crossing is 600u wide. A lunge is 320. There is no version of this that
+  // one shot solves, and the pillar in the middle is not a platform to land on
+  // -- its top is too high to reach from the near ledge, so what a shot into it
+  // actually does is stop dead against its FACE, which is the existing rule
+  // that a lunge is ended by solid terrain.
+  //
+  // Being stopped mid-gap used to be simply death: airborne, charge spent,
+  // nothing to do but fall. A wall changes what that means. Hold the direction
+  // into it and the body catches, the fall slows, and both resources come back
+  // -- the pale pulse says so without a word. The pillar is not an obstacle
+  // that happens to be climbable; it is the only foothold for 600u, and the
+  // level is built so the player finds that out by being thrown against it.
+  const floor7a: Rect = { x: -100, y: GROUND_Y, w: 700, h: 300 }; // spans -100..600
+  const floor7b: Rect = { x: CHIMNEY_FAR_X, y: GROUND_Y, w: 800, h: 300 }; // spans 1200..2000
+
+  // Top at 460, and that number is load-bearing. What matters is not the corner
+  // itself but the corner of the sweep's EXPANDED blocker, half a body up and
+  // left of it -- the point a shot has to clear to get over the pillar at all.
+  // At 520 that point sat 318u from the near ledge's lip, inside a 320u lunge,
+  // and one steep lucky shot skipped the entire level. At 460 it is ~331u away:
+  // out of reach, and provably so in spec/levels.test.ts rather than by eye.
+  const pillar: Rect = { x: PILLAR_X, y: PILLAR_TOP, w: PILLAR_W, h: 940 };
+
+  const goal: Rect = { x: 1800, y: GROUND_Y - 40, w: 60, h: 40 };
+  const bounds: Rect = { x: -150, y: 300, w: 2300, h: 800 };
+
+  return {
+    platforms: [floor7a, pillar, floor7b],
+    movingPlatforms: [],
+    enemies: [],
+    goal,
+    spawn: { x: 60, feetY: GROUND_Y },
+    bounds,
+  };
+}
+
 export const LEVELS: Level[] = [
   buildLevel(),
   buildLevel2(),
   buildLevel3(),
   buildLevel4(),
   buildLevel5(),
+  buildLevel6(),
+  buildLevel7(),
 ];

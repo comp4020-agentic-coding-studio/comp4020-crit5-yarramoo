@@ -9,6 +9,15 @@ import {
   buildLevel3,
   buildLevel4,
   buildLevel5,
+  buildLevel6,
+  buildLevel7,
+  CHIMNEY_FAR_X,
+  GROUND_Y,
+  PILLAR_TOP,
+  PILLAR_W,
+  PILLAR_X,
+  SHUTTER_H,
+  SHUTTER_X,
   PINCER_A_X,
   PINCER_B_X,
   PINCER_DROP,
@@ -26,6 +35,7 @@ import {
   ENEMY_W,
   JUMP_APEX_HEIGHT,
   LUNGE_DISTANCE,
+  MAX_JUMP_DISTANCE,
   PLAYER_H,
   PLAYER_W,
 } from "../src/sim/constants.ts";
@@ -291,5 +301,108 @@ describe("level 5: two lungers at once, one charge", () => {
     // Killed by a lunger rather than by falling: the chamber floor caught them.
     expect(g.enemies.some((e) => e.alive)).toBe(true);
     expect(g.body.feetY).toBeLessThanOrEqual(PINCER_FLOOR_Y);
+  });
+});
+
+describe("level 6: the shutter -- pressing is committing", () => {
+  const shutterTop = (g: Game) => g.movingPlatforms[0]!.y;
+  /** Clear of a standing player's flight band once the bottom edge is above it. */
+  const laneOpen = (g: Game) => shutterTop(g) + SHUTTER_H < GROUND_Y - PLAYER_H;
+
+  it("the pit is uncrossable by jumping but inside a lunge", () => {
+    const pit = 820 - 600;
+    expect(pit).toBeGreaterThan(MAX_JUMP_DISTANCE);
+    expect(pit).toBeLessThan(LUNGE_DISTANCE);
+  });
+
+  it("an expert script waits for the lane, then crosses", () => {
+    let g: Game = newGame(buildLevel6());
+
+    g = runUntil(g, (s) => s.body.x >= 585, () => walk(1)); // out to the lip
+    g = runUntil(g, laneOpen, () => walk(0)); // read the shutter, don't press yet
+
+    g = fireLunge(g, { x: LUNGE_DISTANCE, y: 0 });
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    expect(g.body.x).toBeGreaterThan(820); // cleared the pit
+    expect(g.body.grounded).toBe(true);
+
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe("won");
+  });
+
+  it("pressing while the lane is shut fires a blocked shot into the pit", () => {
+    let g: Game = newGame(buildLevel6());
+    g = runUntil(g, (s) => s.body.x >= 585, () => walk(1));
+    g = runUntil(g, (s) => !laneOpen(s), () => walk(0)); // press at the wrong moment
+
+    g = fireLunge(g, { x: LUNGE_DISTANCE, y: 0 });
+    g = waitForDashToEnd(g);
+    // Stopped dead against the shutter, well short of the far side.
+    expect(g.body.x).toBeLessThan(SHUTTER_X);
+    expect(g.body.x).toBeLessThan(820);
+
+    // ...and with nothing under them, and no foothold to fire from again.
+    g = runUntil(g, (s) => isOver(s.run), () => walk(0));
+    expect(g.run.outcome).toBe("lost");
+  });
+});
+
+describe("level 7: the chimney -- a crossing wider than a lunge", () => {
+  it("is too wide for one lunge, so the pillar is not optional", () => {
+    expect(CHIMNEY_FAR_X - 600).toBeGreaterThan(LUNGE_DISTANCE);
+  });
+
+  it("keeps the pillar top out of reach of a shot from the near ledge", () => {
+    // Otherwise one lucky steep shot skips the entire level. The point that
+    // actually has to be cleared is the corner of the sweep's EXPANDED blocker
+    // -- half a body up and left of the real corner -- not the corner itself.
+    const from = { x: 588, y: GROUND_Y - PLAYER_H / 2 };
+    const clearAt = { x: PILLAR_X - PLAYER_W / 2, y: PILLAR_TOP - PLAYER_H / 2 };
+    const reach = Math.hypot(clearAt.x - from.x, clearAt.y - from.y);
+    expect(reach).toBeGreaterThan(LUNGE_DISTANCE);
+  });
+
+  it("an expert script is stopped by the pillar, catches it, and climbs out", () => {
+    let g: Game = newGame(buildLevel7());
+
+    // Beat 1: lunge for the far side. It cannot get there -- the pillar's face
+    // stops it dead, mid-gap, with the charge spent.
+    g = runUntil(g, (s) => s.body.x >= 585, () => walk(1));
+    g = fireLunge(g, { x: LUNGE_DISTANCE, y: 0 });
+    g = waitForDashToEnd(g);
+    expect(g.body.x).toBeLessThan(PILLAR_X);
+    expect(g.body.x).toBeGreaterThan(800);
+
+    // Beat 2: hold into the face. The body catches instead of falling.
+    g = runUntil(g, (s) => s.body.wallSliding, () => walk(1));
+    expect(g.body.wallDir).toBe(1);
+    expect(g.body.dashCharge).toBe(true); // the wall gave it back
+    expect(g.body.aimMeter).toBe(AIM_METER_MAX_MS);
+
+    // Beat 3: launch straight up off the face, then feather right onto the top.
+    g = fireLunge(g, { x: 0, y: -LUNGE_DISTANCE });
+    g = waitForDashToEnd(g);
+    expect(g.body.feetY).toBeLessThan(PILLAR_TOP);
+    g = runUntil(g, (s) => s.body.grounded, (s) => walk(s.body.x < PILLAR_X + PILLAR_W / 2 ? 1 : 0));
+    expect(g.body.feetY).toBe(PILLAR_TOP);
+
+    // Beat 4: from the top, the far side is an ordinary lunge away.
+    g = fireLunge(g, { x: LUNGE_DISTANCE, y: 0 });
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe("won");
+  });
+
+  it("letting go of the wall instead of holding it is fatal", () => {
+    let g: Game = newGame(buildLevel7());
+    g = runUntil(g, (s) => s.body.x >= 585, () => walk(1));
+    g = fireLunge(g, { x: LUNGE_DISTANCE, y: 0 });
+    g = waitForDashToEnd(g);
+
+    // No direction held: nothing catches, and there is no foothold in open air.
+    g = runUntil(g, (s) => isOver(s.run), () => walk(0));
+    expect(g.run.outcome).toBe("lost");
   });
 });
