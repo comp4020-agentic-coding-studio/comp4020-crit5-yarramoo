@@ -374,6 +374,47 @@ export function buildLevel7(): Level {
   };
 }
 
+/** Level 8's chimney: the two inner faces, and the shaft's floor and ceiling. */
+export const CHIMNEY_LEFT_FACE = 400;
+export const CHIMNEY_RIGHT_FACE = 620;
+export const CHIMNEY_FLOOR_Y = 1500;
+export const CHIMNEY_TOP_Y = 300;
+
+export function buildLevel8(): Level {
+  // A shaft with nothing in it but two faces, and the only way is up.
+  //
+  // The climb is the wall slide asked for repeatedly rather than once. Every
+  // other route is closed by arithmetic, not by furniture: a jump reaches 137u
+  // against a 1200u shaft, and a lunge fired from the floor travels its 320u
+  // straight up into empty air and drops back, because a lunge needs a foothold
+  // and mid-shaft there is none. The only thing that gains height is catching a
+  // face and launching off it, and one launch is never enough.
+  //
+  // The path snakes even though the walls do not: the shaft is 220u across and
+  // a lunge is 320u, so a shot that crosses it arrives with ~253u of its length
+  // left over as height. Aim across and up, get stopped by the far face -- the
+  // ordinary "solid terrain ends a lunge" rule doing the catching -- hold into
+  // it, and repeat on the other side. Roughly five crossings, alternating,
+  // which is what the zigzag actually is.
+  const floor8: Rect = { x: 200, y: CHIMNEY_FLOOR_Y, w: 800, h: 200 };
+  const leftWall: Rect = { x: 100, y: CHIMNEY_TOP_Y, w: 300, h: CHIMNEY_FLOOR_Y - CHIMNEY_TOP_Y };
+  const rightWall: Rect = { x: CHIMNEY_RIGHT_FACE, y: CHIMNEY_TOP_Y, w: 300, h: CHIMNEY_FLOOR_Y - CHIMNEY_TOP_Y };
+
+  // On top of the right wall, so the last crossing has to clear the lip rather
+  // than merely reach the height.
+  const goal: Rect = { x: 700, y: CHIMNEY_TOP_Y - 40, w: 60, h: 40 };
+  const bounds: Rect = { x: 50, y: 220, w: 1000, h: 1500 };
+
+  return {
+    platforms: [floor8, leftWall, rightWall],
+    movingPlatforms: [],
+    enemies: [],
+    goal,
+    spawn: { x: 500, feetY: CHIMNEY_FLOOR_Y },
+    bounds,
+  };
+}
+
 export const LEVELS: Level[] = [
   buildLevel(),
   buildLevel2(),
@@ -382,4 +423,5 @@ export const LEVELS: Level[] = [
   buildLevel5(),
   buildLevel6(),
   buildLevel7(),
+  buildLevel8(),
 ];

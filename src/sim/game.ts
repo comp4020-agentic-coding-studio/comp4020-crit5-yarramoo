@@ -147,7 +147,15 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
       // stepBody's gravity/move physics from one frame short of the true
       // landing spot.
       const to = game.lunge.to;
-      body = { ...body, x: to.x, feetY: feetYOfCenter(to.y), vx: 0, vy: 0 };
+      // Contact flags are cleared, not carried. The body has just been teleported
+      // to the dash's endpoint and has NOT been resolved against terrain yet, so
+      // whatever it was standing on or hanging from before it launched says
+      // nothing about where it is now. Leaving them stale for this one frame was
+      // a standing trap: every `runUntil(grounded)` or `runUntil(wallSliding)`
+      // written after a dash returned instantly, in mid-air, and only looked
+      // right when the pre-launch value happened to be false. stepBody sets the
+      // truth on the very next frame either way.
+      body = { ...body, x: to.x, feetY: feetYOfCenter(to.y), vx: 0, vy: 0, grounded: false, wallSliding: false, wallDir: 0 };
     } else {
       body = stepBody(body, platformsThisFrame, input.move, dtSec);
 

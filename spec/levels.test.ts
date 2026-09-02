@@ -11,7 +11,12 @@ import {
   buildLevel5,
   buildLevel6,
   buildLevel7,
+  buildLevel8,
   CHIMNEY_FAR_X,
+  CHIMNEY_FLOOR_Y,
+  CHIMNEY_LEFT_FACE,
+  CHIMNEY_RIGHT_FACE,
+  CHIMNEY_TOP_Y,
   GROUND_Y,
   PILLAR_TOP,
   PILLAR_W,
@@ -457,5 +462,69 @@ describe("level 6 and the wall slide meet by accident", () => {
 
     g = runUntil(g, (s) => isOver(s.run), () => walk(1));
     expect(g.run.outcome).toBe("won");
+  });
+});
+
+describe("level 8: the chimney -- a climb made of wall grabs", () => {
+  // The shot that crosses the shaft: 220u across leaves ~253u of a 320u lunge
+  // over as height, so a crossing is always up-and-across, never level.
+  const ACROSS = CHIMNEY_RIGHT_FACE - PLAYER_W / 2 - (CHIMNEY_LEFT_FACE + PLAYER_W / 2);
+  const RISE = Math.sqrt(LUNGE_DISTANCE * LUNGE_DISTANCE - ACROSS * ACROSS);
+
+  it("is far too tall to jump and too tall for any single lunge", () => {
+    const shaft = CHIMNEY_FLOOR_Y - CHIMNEY_TOP_Y;
+    expect(shaft).toBeGreaterThan(JUMP_APEX_HEIGHT);
+    expect(shaft).toBeGreaterThan(LUNGE_DISTANCE);
+    // ...and a crossing gains well under the shaft height, so one is never enough.
+    expect(RISE).toBeLessThan(shaft);
+  });
+
+  it("gives no foothold mid-shaft, so a lunge into open air is wasted", () => {
+    let g: Game = newGame(buildLevel8());
+    g = fireLunge(g, { x: 0, y: -LUNGE_DISTANCE }); // straight up, touching nothing
+    g = waitForDashToEnd(g);
+    g = settleAfterDash(g);
+    expect(g.body.wallSliding).toBe(false);
+    expect(g.body.grounded).toBe(false);
+
+    // Falling, with no charge and nothing to catch: back to the floor.
+    g = runUntil(g, (s) => s.body.grounded, () => walk(0));
+    expect(g.body.feetY).toBe(CHIMNEY_FLOOR_Y);
+  });
+
+  it("an expert script zigzags up the shaft and out of the top", () => {
+    let g: Game = newGame(buildLevel8());
+    const startY = g.body.feetY;
+
+    // Off the floor and across to the right-hand face.
+    g = fireLunge(g, { x: 108, y: -301 });
+    g = waitForDashToEnd(g);
+
+    let side: 1 | -1 = 1; // which face we are heading for / hanging on
+    let crossings = 0;
+    while (g.body.feetY > CHIMNEY_TOP_Y + PLAYER_H && crossings < 12) {
+      // Hold into the face until it catches, then launch off it at the angle
+      // that lands on the opposite one.
+      g = runUntil(g, (s) => s.body.wallSliding || isOver(s.run), () => walk(side));
+      expect(g.run.outcome).toBe(null);
+      expect(g.body.wallDir).toBe(side);
+      expect(g.body.dashCharge).toBe(true);
+
+      g = fireLunge(g, { x: -side * ACROSS, y: -RISE });
+      g = waitForDashToEnd(g);
+      side = side === 1 ? -1 : 1;
+      crossings++;
+    }
+
+    expect(crossings).toBeGreaterThan(2); // genuinely a climb, not one lucky shot
+    expect(g.body.feetY).toBeLessThan(startY - 800); // most of the shaft, under its own power
+
+    // Out of the top. Drifting right either settles onto the wall's lip and
+    // walks in, or clips the goal on the way past -- the last crossing carries
+    // the player above the rim, so both are ordinary finishes and the test does
+    // not care which one this run took.
+    g = runUntil(g, (s) => isOver(s.run), () => walk(1));
+    expect(g.run.outcome).toBe("won");
+    expect(g.body.feetY).toBeLessThanOrEqual(CHIMNEY_TOP_Y);
   });
 });
