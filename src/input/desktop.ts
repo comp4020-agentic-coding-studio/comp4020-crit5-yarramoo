@@ -6,6 +6,7 @@ import type { InputSource, PointerInput } from "./types.ts";
 const LEFT_KEYS = new Set(["ArrowLeft", "a", "A"]);
 const RIGHT_KEYS = new Set(["ArrowRight", "d", "D"]);
 const JUMP_KEYS = new Set(["Space", "ArrowUp", "w", "W"]);
+const CANCEL_KEYS = new Set(["Escape"]);
 
 export function createDesktopInput(canvas: HTMLCanvasElement): InputSource {
   const keysDown = new Set<string>();
@@ -48,7 +49,7 @@ export function createDesktopInput(canvas: HTMLCanvasElement): InputSource {
       const left = anyDown(LEFT_KEYS);
       const right = anyDown(RIGHT_KEYS);
       const moveX = left === right ? 0 : left ? -1 : 1;
-      return { moveX, jump: anyDown(JUMP_KEYS), held, pointer };
+      return { moveX, jump: anyDown(JUMP_KEYS), held, cancel: anyDown(CANCEL_KEYS), pointer };
     },
     detach() {
       window.removeEventListener("keydown", onKeyDown);

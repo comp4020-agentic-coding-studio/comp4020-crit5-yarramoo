@@ -27,6 +27,12 @@ export function idleLunge(): LungeState {
 export interface LungeInput {
   /** Is the aim/fire button currently held? */
   held: boolean;
+  /**
+   * Abort this aim and fire nothing. Optional so every existing caller and
+   * test keeps compiling -- absent means "no cancel", which is what they all
+   * meant before the affordance existed.
+   */
+  cancel?: boolean;
   /** Pointer position relative to the player, in world units. */
   aimVector: Vec2;
 }
@@ -102,6 +108,11 @@ export function stepLunge(
   }
 
   if (state.kind === "aiming") {
+    // Cancel outranks release: if both arrive on the same frame, nothing fires.
+    // The charge is NOT spent -- backing out of a shot you never took should
+    // cost you the time it took to decide, and nothing else.
+    if (input.cancel) return { state: { kind: "idle" }, fired: null };
+
     if (!input.held) {
       const to = resolveAimEndpoint(playerPos, input.aimVector, facing, platforms);
       const from = playerPos;

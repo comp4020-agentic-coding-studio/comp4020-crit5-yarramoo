@@ -6,6 +6,7 @@ import { sub } from "./src/core/vec.ts";
 import { createDesktopInput } from "./src/input/desktop.ts";
 import { createTouchInput } from "./src/input/touch.ts";
 import { shouldUseTouchUI, type InputSource } from "./src/input/types.ts";
+import { createSfx } from "./src/audio/sfx.ts";
 import { computeCamera, render } from "./src/render/renderer.ts";
 import { newGame, stepGame, type Game, type GameInput } from "./src/sim/game.ts";
 import { LEVELS } from "./src/sim/level.ts";
@@ -25,6 +26,18 @@ resize();
 let levelIndex = 0;
 let game: Game = newGame(LEVELS[levelIndex]!);
 const input: InputSource = shouldUseTouchUI() ? createTouchInput(canvas) : createDesktopInput(canvas);
+
+// Audio needs a real gesture before it will make a sound, and it needs to be
+// silenceable without any on-screen furniture (the brief allows no text). Both
+// ride on listeners that are already justified: any input unlocks it, and "m"
+// mutes.
+const sfx = createSfx();
+const unlock = (): void => sfx.unlock();
+window.addEventListener("pointerdown", unlock);
+window.addEventListener("keydown", unlock);
+window.addEventListener("keydown", (e) => {
+  if (e.key === "m" || e.key === "M") sfx.toggleMute();
+});
 
 restartLink.hidden = true;
 restartLink.addEventListener("click", (e) => {
@@ -51,10 +64,11 @@ function frame(now: number): void {
 
   const gameInput: GameInput = {
     move: { moveX: raw.moveX, jump: raw.jump },
-    lunge: { held: raw.held, aimVector: sub(worldPointer, playerCenter) },
+    lunge: { held: raw.held, cancel: raw.cancel, aimVector: sub(worldPointer, playerCenter) },
   };
 
   game = stepGame(game, gameInput, dtMs);
+  sfx.play(game.events);
 
   // Advance immediately on a non-final win -- no pause, no restart link.
   if (game.run.outcome === "won" && levelIndex < LEVELS.length - 1) {

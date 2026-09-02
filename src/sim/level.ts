@@ -291,8 +291,14 @@ export function buildLevel6(): Level {
   // Here the only route is through a gap that opens and closes on a timer, and
   // the world stops the instant the button goes down. Press late and the aim
   // line -- drawn with resolveAimEndpoint, the same sweep the real dash uses --
-  // shows the shot ending in mid-air over the pit before it is fired. The
-  // meter then fires it anyway. There is no cancel: pressing IS committing.
+  // shows the shot ending in mid-air over the pit before it is fired.
+  //
+  // Escape aborts that shot, and the level is built around what Escape cannot
+  // do. Backing out is free, so a misread costs a cycle rather than a life; but
+  // the meter is still draining the whole time it is held, and running it dry
+  // fires the shot whether the lane is open or not. The demand is not "commit
+  // blind", it is "decide before the clock decides for you" -- which is the
+  // same lesson with a fairer floor under it.
   const floor6a: Rect = { x: -100, y: GROUND_Y, w: 700, h: 300 }; // spans -100..600
   const floor6b: Rect = { x: 820, y: GROUND_Y, w: 900, h: 300 }; // 220u pit at 600..820
 

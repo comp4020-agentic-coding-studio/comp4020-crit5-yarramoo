@@ -11,12 +11,33 @@
 import { overlaps, type Rect } from "../core/aabb.ts";
 import type { Vec2 } from "../core/vec.ts";
 import { bodyRect, newBody, stepBody, type Body, type BodyInput } from "./body.ts";
-import { PLAYER_H, VOID_Y } from "./constants.ts";
+import { ENEMY_H, PLAYER_H, VOID_Y } from "./constants.ts";
 import { applyLungeSweep, enemyRect, stepEnemy, stepLungerEnemy, type Enemy } from "./enemy.ts";
 import type { Level } from "./level.ts";
 import { dashPosition, idleLunge, stepLunge, type LungeInput, type LungeState } from "./lunge.ts";
 import { platformRect, stepMovingPlatform, type MovingPlatform } from "./platform.ts";
 import { isOver, newRun, step as stepRun, type RunState } from "./run.ts";
+
+/**
+ * Something that happened during the step that produced this state.
+ *
+ * Pure data, no wall clock, so emitting these keeps src/sim deterministic and
+ * makes them assertable ("one lunge through two enemies emits two kills") --
+ * but the reason they exist is that presentation cannot reconstruct them.
+ * Renderer and audio both need "an enemy died THIS frame", and a state
+ * snapshot cannot say that: by the time anyone looks, the enemy is just
+ * absent. stepGame already knew; it simply used to throw the knowledge away.
+ */
+export type GameEvent =
+  | { kind: "aimStarted" }
+  | { kind: "aimCancelled" }
+  | { kind: "meterExpired" }
+  | { kind: "dashFired" }
+  | { kind: "enemyKilled"; id: string; at: Vec2 }
+  | { kind: "landed" }
+  | { kind: "wallGrabbed" }
+  | { kind: "died" }
+  | { kind: "won" };
 
 export interface Game {
   level: Level;
@@ -25,6 +46,8 @@ export interface Game {
   movingPlatforms: MovingPlatform[];
   lunge: LungeState;
   run: RunState;
+  /** Events from the step that produced this state. Empty on a fresh game. */
+  events: readonly GameEvent[];
 }
 
 export interface GameInput {
@@ -45,6 +68,7 @@ export function newGame(level: Level): Game {
     movingPlatforms: level.movingPlatforms,
     lunge: idleLunge(),
     run: newRun(),
+    events: [],
   };
 }
 
@@ -58,7 +82,9 @@ const feetYOfCenter = (centerY: number): number => centerY + PLAYER_H / 2;
 
 /** Advance the whole game by one frame. Returns a NEW state; never mutates its argument. */
 export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): Game {
-  if (isOver(game.run)) return game;
+  // A finished run emits nothing further -- including re-emitting the death or
+  // win that ended it, which would otherwise retrigger every frame forever.
+  if (isOver(game.run)) return game.events.length === 0 ? game : { ...game, events: [] };
 
   const dtSec = dtMs / 1000;
   const playerCenter: Vec2 = { x: game.body.x, y: centerYOf(game.body.feetY) };
@@ -148,10 +174,26 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
     movingPlatforms = steppedMovingPlatforms;
   }
 
+  const events: GameEvent[] = [];
+  if (game.lunge.kind !== "aiming" && lungeResult.state.kind === "aiming") events.push({ kind: "aimStarted" });
+  if (game.lunge.kind === "aiming" && lungeResult.state.kind === "idle") events.push({ kind: "aimCancelled" });
+  if (meterExpired) events.push({ kind: "meterExpired" });
+
   if (lungeResult.fired) {
+    events.push({ kind: "dashFired" });
+    const before = enemies;
     enemies = applyLungeSweep(enemies, lungeResult.fired.from, lungeResult.fired.to);
+    for (let i = 0; i < enemies.length; i++) {
+      if (before[i]!.alive && !enemies[i]!.alive) {
+        const e = enemies[i]!;
+        events.push({ kind: "enemyKilled", id: e.id, at: { x: e.x, y: e.feetY - ENEMY_H / 2 } });
+      }
+    }
     body = { ...body, dashCharge: false };
   }
+
+  if (!game.body.grounded && body.grounded) events.push({ kind: "landed" });
+  if (!game.body.wallSliding && body.wallSliding) events.push({ kind: "wallGrabbed" });
 
   const playerRect: Rect = bodyRect(body);
   const touchedLiveEnemy = enemies.some((e) => e.alive && overlaps(playerRect, enemyRect(e)));
@@ -159,6 +201,8 @@ export function stepGame(game: Readonly<Game>, input: GameInput, dtMs: number): 
   const reachedGoal = overlaps(playerRect, game.level.goal);
 
   const run = stepRun(game.run, { dtMs, died: touchedLiveEnemy || fellInVoid, won: reachedGoal });
+  if (game.run.outcome === null && run.outcome === "lost") events.push({ kind: "died" });
+  if (game.run.outcome === null && run.outcome === "won") events.push({ kind: "won" });
 
-  return { level: game.level, body, enemies, movingPlatforms, lunge: lungeResult.state, run };
+  return { level: game.level, body, enemies, movingPlatforms, lunge: lungeResult.state, run, events };
 }

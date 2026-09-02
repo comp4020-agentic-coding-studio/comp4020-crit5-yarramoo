@@ -3,6 +3,13 @@
 // the aim/fire drag zone -- touch and hold to freeze time and aim, lift to
 // fire, exactly like the desktop mouse button but with the pointer's own
 // position standing in for the cursor.
+//
+// The two halves are independent on purpose, and that is what makes the wall
+// slide playable on a phone: catching a wall means HOLDING a direction, and
+// the left thumb can keep holding it while the right thumb aims and fires off
+// the same wall. A single-zone scheme could not express both at once.
+//
+// The jump band doubles as cancel while aiming (see read()).
 
 import type { InputSource, PointerInput } from "./types.ts";
 
@@ -86,7 +93,13 @@ export function createTouchInput(canvas: HTMLCanvasElement): InputSource {
         if (dx > JOYSTICK_DEADZONE_PX) moveX = 1;
         else if (dx < -JOYSTICK_DEADZONE_PX) moveX = -1;
       }
-      return { moveX, jump: jumpTouch !== null, held: aimTouch !== null, pointer: lastAimPointer };
+      const aiming = aimTouch !== null;
+      // The jump band is the cancel button while a shot is being held. Jump is
+      // inert mid-aim anyway (stepBody never runs while time is frozen), so
+      // this costs nothing and needs no new zone to discover -- the thumb is
+      // already resting there.
+      const cancel = aiming && jumpTouch !== null;
+      return { moveX, jump: !aiming && jumpTouch !== null, held: aiming, cancel, pointer: lastAimPointer };
     },
     detach() {
       canvas.removeEventListener("pointerdown", onPointerDown);

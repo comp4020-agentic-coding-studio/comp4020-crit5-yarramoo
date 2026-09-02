@@ -10,6 +10,12 @@ export interface PointerInput {
   jump: boolean;
   /** Is the aim/fire button or touch currently held? */
   held: boolean;
+  /**
+   * Abort the aim without firing. Desktop is Escape; touch reuses the jump
+   * band, which is dead weight while time is frozen anyway (stepBody does not
+   * run mid-aim, so a jump pressed then is already swallowed).
+   */
+  cancel: boolean;
   /** The aim pointer's current position, in canvas pixel coordinates. */
   pointer: Vec2;
 }
